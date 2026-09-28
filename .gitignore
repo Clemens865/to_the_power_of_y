@@ -1,0 +1,25 @@
+# Dependencies & build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Local secrets
+.env
+.env.local
+.env.*.local
+
+# Local agent / orchestration tooling (ruflo, Claude Code, Codex) — not part of the site
+.claude/
+.claude-flow/
+.codex/
+.agents/
+.swarm/
+.mcp.json
+ruvector.db
+CLAUDE.md
+AGENTS.md
+
+# Browser test artefacts
+.playwright-mcp/
+
+.DS_Store

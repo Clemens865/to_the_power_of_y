@@ -1,0 +1,88 @@
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; overflow: hidden; }
+body { background: #000; font-family: system-ui, sans-serif; }
+
+.stage { position: fixed; inset: 0; }
+.bg { position: absolute; inset: 0; }
+.bg > * { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; }
+
+.spot { position: absolute; transform: translate(-50%, -50%); z-index: 2; }
+.cursor-layer { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+.cursor-layer > * { width: 100%; height: 100%; }
+
+/* React Bits text effects inherit the button's typography */
+.xbtn .shiny-text, .xbtn .animated-gradient-text, .xbtn .text-type, .xbtn .text-rotate { font: inherit; margin: 0; }
+.xbtn .animated-gradient-text { backdrop-filter: none; border-radius: 0; overflow: visible; }
+
+/* ---------- caption ---------- */
+.caption {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 20px;
+  display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap;
+  font: 11px/1.4 ui-monospace, SFMono-Regular, monospace; letter-spacing: 0.04em;
+  opacity: 0.7; pointer-events: none; mix-blend-mode: difference; color: #fff;
+}
+.caption .mark { font-size: 15px; font-weight: 700; }
+.caption .meta { margin-left: auto; opacity: 0.7; }
+
+/* ---------- chrome (stays readable on any universe) ---------- */
+.chrome { position: absolute; top: 14px; right: 16px; display: flex; gap: 8px; z-index: 50; mix-blend-mode: difference; }
+.chrome button { font: 11px/1 ui-monospace, SFMono-Regular, monospace; letter-spacing: 0.06em; color: #fff; background: none; border: 1px solid #fff8; border-radius: 999px; padding: 7px 11px; cursor: pointer; }
+.chrome button:hover { border-color: #fff; }
+
+/* ---------- keep dialog ---------- */
+.keep { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid #333; border-radius: 14px; background: #0f0f0f; color: #eee; font: 14px/1.5 system-ui, sans-serif; cursor: auto; }
+.keep::backdrop { background: #000a; backdrop-filter: blur(6px); }
+.keep-body { padding: 22px; display: grid; gap: 16px; }
+.keep header { display: flex; justify-content: space-between; align-items: start; }
+.keep-eyebrow { font: 11px ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.14em; color: #999; }
+.keep h2 { margin: 4px 0 0; font-size: 28px; font-weight: 500; letter-spacing: -0.02em; }
+.keep h2 span { font-family: ui-monospace, monospace; }
+.keep-x { background: none; border: 0; color: #aaa; font-size: 28px; line-height: 1; cursor: pointer; }
+.swatches { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.swatches button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid #fff3; cursor: pointer; }
+.keep-font { margin-left: 8px; font-size: 22px; }
+.keep-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.keep-actions button, .keep-tabs button { font: inherit; font-size: 13px; color: #eee; background: #1c1c1c; border: 1px solid #333; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+.keep-actions button:hover, .keep-tabs button:hover { border-color: #666; }
+.keep-actions .primary { background: #eee; color: #111; border-color: #eee; }
+.keep-note { margin: 0; color: #f99; font-size: 12px; }
+.keep-tabs { display: flex; gap: 6px; }
+.keep-tabs button[aria-pressed='true'] { border-color: #eee; }
+.keep-code { margin: 0; max-height: 44vh; overflow: auto; background: #080808; border: 1px solid #222; border-radius: 8px; padding: 14px; font: 12px/1.55 ui-monospace, SFMono-Regular, monospace; white-space: pre-wrap; word-break: break-word; }
+
+/* ---------- universe transitions (View Transitions API) ---------- */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.7s; animation-timing-function: cubic-bezier(.7,0,.2,1); mix-blend-mode: normal; }
+::view-transition-old(root) { animation-name: none; }
+
+[data-transition='circle']::view-transition-new(root) { animation-name: vt-circle; }
+[data-transition='wipe-left']::view-transition-new(root) { animation-name: vt-wipe-left; }
+[data-transition='wipe-up']::view-transition-new(root) { animation-name: vt-wipe-up; }
+[data-transition='blinds']::view-transition-new(root) { animation-name: vt-blinds; }
+[data-transition='zoom']::view-transition-new(root) { animation-name: vt-zoom; }
+[data-transition='spin']::view-transition-new(root) { animation-name: vt-spin; }
+[data-transition='flip']::view-transition-new(root) { animation-name: vt-flip; }
+[data-transition='dissolve']::view-transition-new(root) { animation-name: vt-dissolve; }
+[data-transition='diamond']::view-transition-new(root) { animation-name: vt-diamond; }
+[data-transition='split']::view-transition-new(root) { animation-name: vt-split; }
+[data-transition='zoom']::view-transition-old(root) { animation: vt-zoom-out 0.7s cubic-bezier(.7,0,.2,1) both; }
+[data-transition='flip']::view-transition-old(root) { animation: vt-dissolve-out 0.35s ease both; }
+
+@keyframes vt-circle { from { clip-path: circle(0 at var(--vx) var(--vy)); } to { clip-path: circle(150vmax at var(--vx) var(--vy)); } }
+@keyframes vt-wipe-left { from { clip-path: inset(0 0 0 100%); } to { clip-path: inset(0); } }
+@keyframes vt-wipe-up { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0); } }
+@keyframes vt-blinds {
+  from { clip-path: polygon(0 0, 0 0, 0 100%, 0 100%, 20% 0, 20% 0, 20% 100%, 20% 100%, 40% 0, 40% 0, 40% 100%, 40% 100%, 60% 0, 60% 0, 60% 100%, 60% 100%, 80% 0, 80% 0, 80% 100%, 80% 100%); }
+  to { clip-path: polygon(0 0, 20% 0, 20% 100%, 0 100%, 20% 0, 40% 0, 40% 100%, 20% 100%, 40% 0, 60% 0, 60% 100%, 40% 100%, 60% 0, 80% 0, 80% 100%, 60% 100%, 80% 0, 100% 0, 100% 100%, 80% 100%); }
+}
+@keyframes vt-zoom { from { transform: scale(0.2); opacity: 0; border-radius: 40px; } }
+@keyframes vt-zoom-out { to { transform: scale(2.5); opacity: 0; } }
+@keyframes vt-spin { from { transform: rotate(-90deg) scale(0); } }
+@keyframes vt-flip { from { transform: perspective(1200px) rotateY(90deg); } }
+@keyframes vt-dissolve { from { opacity: 0; filter: blur(30px) saturate(3); } }
+@keyframes vt-dissolve-out { to { opacity: 0; } }
+@keyframes vt-diamond { from { clip-path: polygon(50% 50%, 50% 50%, 50% 50%, 50% 50%); } to { clip-path: polygon(50% -60%, 160% 50%, 50% 160%, -60% 50%); } }
+@keyframes vt-split { from { clip-path: inset(50% 0 50% 0); } to { clip-path: inset(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .xbtn, .xbtn::before { animation: none !important; }
+}

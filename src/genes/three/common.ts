@@ -23,6 +23,8 @@ export interface SceneCtx {
   colors: THREE.Color[];
   bg: THREE.Color;
   params: number[];
+  /** Extra seeded numbers (0–1) for composed scenes; may be empty. */
+  layout: number[];
   isLight: boolean;
   uniforms: SharedUniforms;
   rng: () => number;
@@ -72,7 +74,7 @@ vec3 ramp(float h){ h = clamp(h, 0., 1.); return h < .5 ? mix(uC0, uC1, h * 2.) 
 `;
 
 // Fragment prelude: calmer, fainter centre where the button sits.
-const FHEAD = `${UNI}
+export const FHEAD = `${UNI}
 float calm(){ vec2 q = (gl_FragCoord.xy / uRes - .5) * vec2(uRes.x / uRes.y, 1.); return mix(.35, 1., smoothstep(.05, .5, length(q))); }
 `;
 
@@ -98,14 +100,14 @@ export const ROTATE = `vec3 rotAxis(vec3 v, vec3 k, float a){ float c = cos(a), 
 `;
 
 // A ShaderMaterial wired to the shared uniforms. Dark palettes glow additively; light ones paint normally.
-export const material = (ctx: SceneCtx, vertexShader: string, opts: { frag?: string; uniforms?: Record<string, { value: unknown }>; solid?: boolean } = {}) =>
+export const material = (ctx: SceneCtx, vertexShader: string, opts: { frag?: string; uniforms?: Record<string, { value: unknown }>; solid?: boolean; normal?: boolean } = {}) =>
   new THREE.ShaderMaterial({
     uniforms: { ...ctx.uniforms, ...opts.uniforms },
     vertexShader: VHEAD + vertexShader,
     fragmentShader: opts.frag ?? FRAG_POINT,
     transparent: !opts.solid,
     depthWrite: !!opts.solid,
-    blending: opts.solid || ctx.isLight ? THREE.NormalBlending : THREE.AdditiveBlending
+    blending: opts.solid || opts.normal || ctx.isLight ? THREE.NormalBlending : THREE.AdditiveBlending
   });
 
 // Gentle drift + eased pointer parallax around a base camera pose.

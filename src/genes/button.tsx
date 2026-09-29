@@ -16,6 +16,7 @@ const PRESSES: Press[] = ['none', 'pop', 'shake', 'jelly', 'sink', 'ripple', 'ti
 export type Wrap = (typeof WRAPS)[number];
 
 export interface ButtonGene {
+  interaction?: 'press' | 'tear' | 'hold' | 'sling';
   shape: Shape;
   skin: Skin;
   wrap: Wrap;
@@ -45,6 +46,22 @@ export const rollButton = (rng: Rng): ButtonGene => {
 
 export const rollHover = (rng: Rng): Hover => rng.pick(HOVERS);
 export const rollEntrance = (rng: Rng): Entrance => rng.pick(ENTRANCES);
+
+/** Called on an independent stream so existing gene rolls keep their seed contract. */
+export const rollTicketButton = (rng: Rng, button: ButtonGene): ButtonGene => rng.chance(0.07)
+  ? { ...button, interaction: 'tear', shape: 'ticket', skin: 'solid', wrap: 'none', idle: 'none', magnet: false, spark: false, press: 'none', hover: 'grow', entrance: 'none', size: Math.min(button.size, 2.4) }
+  : button;
+
+/** Preserve ticket seeds and add a small independent pool of gesture-driven buttons. */
+export const rollGestureButton = (rng: Rng, button: ButtonGene): ButtonGene => {
+  if (buttonOwnsAction(button) || !rng.chance(0.08)) return button;
+  const interaction = rng.pick(['hold', 'sling'] as const);
+  return { ...button, interaction, shape: interaction === 'hold' ? 'rounded' : 'circle', skin: 'solid',
+    wrap: 'none', idle: 'none', magnet: false, spark: false, press: 'none', hover: 'grow',
+    entrance: 'none', size: Math.min(button.size, 2.4) };
+};
+
+export const buttonOwnsAction = (gene: ButtonGene): boolean => !!gene.interaction && gene.interaction !== 'press';
 
 export const buttonUsesWebGL = (gene: ButtonGene): boolean => gene.wrap === 'specular';
 
@@ -245,8 +262,11 @@ const REGISTRY = {
   ClickSpark: lazy(() => import('../vendor/react-bits/ClickSpark/ClickSpark'))
 } as unknown as Record<string, AnyComponent>;
 const SpecularButton = lazy(() => import('../vendor/react-bits/SpecularButton/SpecularButton')) as unknown as AnyComponent;
+const TicketButton = lazy(() => import('./ticketButton'));
+const HoldButton = lazy(() => import('./holdButton'));
+const SlingButton = lazy(() => import('./slingButton'));
 
-export const XButton = ({ gene, palette, onPress, onHover, children }: { gene: ButtonGene; palette: Palette; onPress: (e: React.MouseEvent) => void; onHover?: () => void; children: ReactNode }) => {
+export const XButton = ({ gene, palette, onPress, onHover, children }: { gene: ButtonGene; palette: Palette; onPress: (e: { clientX: number; clientY: number }) => void; onHover?: () => void; children: ReactNode }) => {
   const style = {
     '--bg': palette.bg,
     '--fg': palette.fg,
@@ -265,6 +285,21 @@ export const XButton = ({ gene, palette, onPress, onHover, children }: { gene: B
       <span className="xbtn-label">{children}</span>
     </button>
   );
+  if (gene.interaction === 'tear') return (
+    <Suspense fallback={plain}>
+      <TicketButton background={palette.accent} color={labelColor(gene, palette)} accent={palette.accent2} size={gene.size} onPress={onPress} onHover={onHover}>
+        {children}
+      </TicketButton>
+    </Suspense>
+  );
+  if (gene.interaction === 'hold' || gene.interaction === 'sling') {
+    const InteractiveButton = gene.interaction === 'hold' ? HoldButton : SlingButton;
+    return <Suspense fallback={plain}>
+      <InteractiveButton background={palette.accent} color={labelColor(gene, palette)} accent={palette.accent2} size={gene.size} onPress={onPress} onHover={onHover}>
+        {children}
+      </InteractiveButton>
+    </Suspense>;
+  }
   let node: ReactNode =
     gene.wrap === 'specular' ? (
       <Suspense fallback={plain}>
@@ -303,7 +338,21 @@ const attrs = (props: Record<string, unknown>) =>
  * JSX for the button (+ wrappers). Expects `press`, `sound`, `SOUND` in scope, and — when
  * pressNeedsJs(gene.press) — the `pressHandlers` helper from PRESS_HELPER_SOURCE.
  */
-export const buttonKit = (gene: ButtonGene, palette: Palette, labelJsx: string): { jsx: string; components: string[] } => {
+export const buttonKit = (gene: ButtonGene, palette: Palette, labelJsx: string): { jsx: string; components: string[]; importLine?: string; files?: Record<string, string>; css?: string; install?: string[] } => {
+  if (gene.interaction === 'hold' || gene.interaction === 'sling') {
+    const name = gene.interaction === 'hold' ? 'HoldButton' : 'SlingButton';
+    return {
+      jsx: `<${name} background={${js(palette.accent)}} color={${js(labelColor(gene, palette))}} accent={${js(palette.accent2)}} size={${gene.size}} onPress={press} onHover={() => sound.current.hover(SOUND)}>${labelJsx}</${name}>`,
+      components: [],
+      install: [`npx shadcn@latest add @react-bits/${name}-TS-CSS`],
+      importLine: `import ${name} from './${gene.interaction}Button';`
+    };
+  }
+  if (gene.interaction === 'tear') return {
+    jsx: `<TicketButton background={${js(palette.accent)}} color={${js(labelColor(gene, palette))}} accent={${js(palette.accent2)}} size={${gene.size}} onPress={press} onHover={() => sound.current.hover(SOUND)}>${labelJsx}</TicketButton>`,
+    components: ['TearTicket'],
+    importLine: "import TicketButton from './ticketButton';"
+  };
   const hover = `onMouseEnter={() => sound.current.hover(SOUND)}`;
   const pressAttr = pressNeedsJs(gene.press) ? ` {...pressHandlers(${js(gene.press)})}` : '';
   const label = `<span className="xbtn-label">${labelJsx}</span>`;

@@ -1,7 +1,9 @@
 import { zipSync, strToU8 } from 'fflate';
 import type { Genome } from '../engine/genome';
 import { fontUrl, fontVariationCss } from '../engine/fonts';
-import { backgroundKit, isShaderBackground } from '../genes/backgrounds';
+import { backgroundKit, isShaderBackground, isVantaBackground, isThreeBackground } from '../genes/backgrounds';
+import { threeSceneKit, type ThreeSceneGeneProps } from '../genes/three';
+import { vantaKit } from './vantaKit';
 import { shaderKit, type shaderProps } from '../genes/shaders';
 import { buttonCssFor } from '../genes/buttonCss';
 import { buttonKit, labelColor, pressNeedsJs, PRESS_HELPER_SOURCE } from '../genes/button';
@@ -32,7 +34,15 @@ const parts = (g: Genome) => {
   const button = buttonKit(g.button, g.palette, label.jsx);
   const decor = decorKit(g.layout, { seed: g.seed, word: g.label.text, count: 0, palette: g.palette, tagline: g.voice.tagline, hint: g.voice.hint });
   const shader = isShaderBackground(g.background.id) ? shaderKit(g.background.props as ReturnType<typeof shaderProps>) : null;
-  const background = shader ? { importLine: shader.importLine, jsx: shader.jsx, install: [] as string[] } : backgroundKit(g.background);
+  const vanta = isVantaBackground(g.background.id) ? vantaKit(String(g.background.props.effect), g.background.props.options as Record<string, unknown>) : null;
+  const three = isThreeBackground(g.background.id) ? threeSceneKit(g.background.props as unknown as ThreeSceneGeneProps) : null;
+  const background = shader
+    ? { importLine: shader.importLine, jsx: shader.jsx, install: [] as string[] }
+    : three
+      ? { importLine: three.importLine, jsx: three.jsx, install: three.install }
+      : vanta
+      ? { importLine: vanta.importLine, jsx: vanta.jsx, install: vanta.install }
+      : backgroundKit(g.background);
   const overlay = overlayKit(g.overlay);
   const cursor = cursorEffectInfo(g.cursor);
   const behaviour = behaviourKit(g.behaviour);
@@ -54,7 +64,7 @@ const parts = (g: Genome) => {
   const hasConfetti = g.burst.kind !== 'none' && g.burst.kind !== 'shockwave';
   if (hasConfetti) install.add('npm i @tsparticles/confetti');
   for (const c of rb) install.add(`npx shadcn@latest add @react-bits/${c}-TS-CSS`);
-  return { label, button, decor, background, overlay, cursor, behaviour, shader, rb: [...rb], named, otherImports, install: [...install], hasConfetti };
+  return { label, button, decor, background, overlay, cursor, behaviour, shader, vanta, three, rb: [...rb], named, otherImports, install: [...install], hasConfetti };
 };
 
 const burstOptions = (g: Genome) => {
@@ -246,8 +256,8 @@ export const buildKit = (g: Genome, link: string) => {
     'recipe.json': JSON.stringify(g, null, 2)
   };
   if (cursorEffectInfo(g.cursor)?.trail) files['trails.tsx'] = trailsSource;
-  const shaderFiles = parts(g).shader?.files ?? {};
-  Object.assign(files, shaderFiles);
+  const p = parts(g);
+  Object.assign(files, p.shader?.files ?? {}, p.vanta?.files ?? {}, p.three?.files ?? {});
   const behaviourSource = behaviourKit(g.behaviour).source;
   if (behaviourSource) files['Behaviour.tsx'] = behaviourSource;
   return files;

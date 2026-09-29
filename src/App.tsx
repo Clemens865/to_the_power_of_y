@@ -2,7 +2,7 @@ import { Suspense, useCallback, useEffect, useRef, useState, type CSSProperties 
 import { flushSync } from 'react-dom';
 import { grow, type Genome } from './engine/genome';
 import { newSeed } from './engine/rng';
-import { loadFont } from './engine/fonts';
+import { loadFont, fontVariationCss } from './engine/fonts';
 import { SoundEngine } from './engine/sound';
 import { Background } from './genes/backgrounds';
 import { XButton, labelColor } from './genes/button';
@@ -10,7 +10,12 @@ import { ALL_BUTTON_CSS } from './genes/buttonCss';
 import { Label } from './genes/label';
 import { CursorLayer, cursorCss, cursorEffectInfo } from './genes/cursor';
 import { Decor, decorFor, LAYOUT_CSS } from './genes/layout';
+import { Overlay, OVERLAY_CSS } from './genes/overlay';
+import { generatedTransitionCss, isGenerated } from './genes/transition';
+import { RARITY_CSS, RARITY_LABEL } from './genes/rarity';
+import { BURST_CSS, fireBurst } from './genes/burst';
 import { ExportPanel } from './export/ExportPanel';
+import { Layer } from './engine/Layer';
 
 const seedFromHash = () => location.hash.slice(1).replace(/[^0-9a-z]/gi, '') || null;
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -60,9 +65,21 @@ export const App = () => {
       const next = grow(seed);
       await loadFont(next.font);
       const root = document.documentElement;
-      root.dataset.transition = next.transition;
-      root.style.setProperty('--vx', `${origin.current.x}px`);
-      root.style.setProperty('--vy', `${origin.current.y}px`);
+      const { x, y } = origin.current;
+      const t = next.transition;
+      root.dataset.transition = isGenerated(t) ? 'generated' : t.kind;
+      root.style.setProperty('--vx', `${x}px`);
+      root.style.setProperty('--vy', `${y}px`);
+      root.style.setProperty('--vt-dur', `${t.duration}s`);
+      root.style.setProperty('--vt-ease', t.easing);
+      // Generated transitions are built for this seed and this press point.
+      let dyn = document.getElementById('vt-generated');
+      if (!dyn) {
+        dyn = document.createElement('style');
+        dyn.id = 'vt-generated';
+        document.head.appendChild(dyn);
+      }
+      dyn.textContent = isGenerated(t) ? generatedTransitionCss(t, x, y) : '';
       const apply = () =>
         flushSync(() => {
           setGenome(next);
@@ -79,8 +96,13 @@ export const App = () => {
   const press = useCallback((e?: { clientX: number; clientY: number }) => {
     origin.current = e && e.clientX ? { x: e.clientX, y: e.clientY } : { x: innerWidth / 2, y: innerHeight / 2 };
     heard.current = true;
-    sound.current.press(genomeRef.current.sound);
-    location.hash = newSeed();
+    const current = genomeRef.current;
+    sound.current.press(current.sound);
+    void fireBurst(current.burst, current.palette, origin.current.x, origin.current.y);
+    // A beat of delay lets the press animation register before the universe is replaced.
+    setTimeout(() => {
+      location.hash = newSeed();
+    }, 120);
   }, []);
 
   useEffect(() => {
@@ -96,7 +118,7 @@ export const App = () => {
     return () => removeEventListener('keydown', onKey);
   }, [press, keepOpen]);
 
-  const { palette, font, background, button, label, seed, cursor, layout } = genome;
+  const { palette, font, background, button, label, seed, cursor, layout, overlay, voice, rarity, name } = genome;
   const hidesCursor = cursorEffectInfo(cursor)?.hidesCursor;
   const stage = {
     background: palette.bg,
@@ -115,23 +137,37 @@ export const App = () => {
   } as CSSProperties;
 
   return (
-    <main className="stage" style={stage}>
-      <style>{ALL_BUTTON_CSS + LAYOUT_CSS}</style>
-      <div className="bg" aria-hidden>
+    <main className={`stage${rarity === 'mythic' ? ' rarity-mythic' : ''}`} style={stage}>
+      <style>{ALL_BUTTON_CSS + LAYOUT_CSS + OVERLAY_CSS + RARITY_CSS + BURST_CSS + fontVariationCss(font, '.xbtn-label')}</style>
+      <Layer key={`b${seed}`} name={`background:${background.id}`} className="bg">
         <Suspense fallback={null}>
-          <Background key={seed} gene={background} />
+          <Background gene={background} />
         </Suspense>
+      </Layer>
+
+      <Layer key={`o${seed}`} name={`overlay:${overlay.kind}`}>
+        <Overlay gene={overlay} />
+      </Layer>
+
+      <Layer key={`d${seed}`} name={`layout:${layout.kind}`}>
+        <Decor items={decorFor(layout, { seed, word: label.text, count, palette, tagline: voice.tagline, hint: voice.hint })} />
+      </Layer>
+
+      <div className={`spot${rarity !== 'common' ? ' rarity-holo' : ''}`} style={{ left: `${layout.x}%`, top: `${layout.y}%` }}>
+        <Layer key={`x${seed}`} name={`button:${button.wrap}/${label.effect}`}>
+          <XButton gene={button} palette={palette} onPress={press} onHover={() => sound.current.hover(genome.sound)}>
+            <Layer name={`label:${label.effect}`} fallback={<span>{label.text}</span>}>
+              <Label gene={label} palette={palette} font={font} color={labelColor(button, palette)} fontPx={button.size * 16} />
+            </Layer>
+          </XButton>
+        </Layer>
       </div>
 
-      <Decor key={`d${seed}`} items={decorFor(layout, { seed, word: label.text, count })} />
+      <Layer key={`c${seed}`} name={`cursor:${cursor.effect}`}>
+        <CursorLayer gene={cursor} text={label.text} />
+      </Layer>
 
-      <div className="spot" style={{ left: `${layout.x}%`, top: `${layout.y}%` }}>
-        <XButton key={seed} gene={button} palette={palette} onPress={press} onHover={() => sound.current.hover(genome.sound)}>
-          <Label gene={label} palette={palette} font={font} color={labelColor(button, palette)} fontPx={button.size * 16} />
-        </XButton>
-      </div>
-
-      <CursorLayer key={`c${seed}`} gene={cursor} text={label.text} />
+      {rarity !== 'common' && <div className="rarity-badge">{RARITY_LABEL[rarity]}</div>}
 
       <div className="chrome">
         <button onClick={() => setMuted(m => !m)} aria-pressed={!muted} title="Sound (m)">
@@ -147,8 +183,9 @@ export const App = () => {
           x<sup>y</sup>
         </span>
         <span>y = {seed}</span>
+        <span className="name">{name}</span>
         <span className="meta">
-          {background.id} · {font.family} · {palette.mood} · {layout.kind} · {cursor.effect === 'none' ? cursor.css : cursor.effect} · {genome.sound.voice} · n={count}
+          {background.id} · {font.family} · {palette.mood} · {layout.kind} · {cursor.effect === 'none' ? cursor.css : cursor.effect} · {overlay.kind} · {voice.tone} · {genome.sound.voice} · n={count}
         </span>
       </footer>
 

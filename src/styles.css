@@ -51,7 +51,7 @@ body { background: #000; font-family: system-ui, sans-serif; }
 .keep-code { margin: 0; max-height: 44vh; overflow: auto; background: #080808; border: 1px solid #222; border-radius: 8px; padding: 14px; font: 12px/1.55 ui-monospace, SFMono-Regular, monospace; white-space: pre-wrap; word-break: break-word; }
 
 /* ---------- universe transitions (View Transitions API) ---------- */
-::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.7s; animation-timing-function: cubic-bezier(.7,0,.2,1); mix-blend-mode: normal; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--vt-dur, 0.7s); animation-timing-function: var(--vt-ease, cubic-bezier(.7,0,.2,1)); mix-blend-mode: normal; }
 ::view-transition-old(root) { animation-name: none; }
 
 [data-transition='circle']::view-transition-new(root) { animation-name: vt-circle; }
@@ -64,7 +64,11 @@ body { background: #000; font-family: system-ui, sans-serif; }
 [data-transition='dissolve']::view-transition-new(root) { animation-name: vt-dissolve; }
 [data-transition='diamond']::view-transition-new(root) { animation-name: vt-diamond; }
 [data-transition='split']::view-transition-new(root) { animation-name: vt-split; }
-[data-transition='zoom']::view-transition-old(root) { animation: vt-zoom-out 0.7s cubic-bezier(.7,0,.2,1) both; }
+[data-transition='blur-slide']::view-transition-new(root) { animation-name: vt-blur-slide-in; }
+[data-transition='blur-slide']::view-transition-old(root) { animation: vt-blur-slide-out var(--vt-dur, 0.7s) var(--vt-ease, ease) both; }
+[data-transition='scale-blur']::view-transition-new(root) { animation-name: vt-scale-blur-in; }
+[data-transition='scale-blur']::view-transition-old(root) { animation: vt-dissolve-out var(--vt-dur, 0.7s) ease both; }
+[data-transition='zoom']::view-transition-old(root) { animation: vt-zoom-out var(--vt-dur, 0.7s) cubic-bezier(.7,0,.2,1) both; }
 [data-transition='flip']::view-transition-old(root) { animation: vt-dissolve-out 0.35s ease both; }
 
 @keyframes vt-circle { from { clip-path: circle(0 at var(--vx) var(--vy)); } to { clip-path: circle(150vmax at var(--vx) var(--vy)); } }
@@ -81,6 +85,9 @@ body { background: #000; font-family: system-ui, sans-serif; }
 @keyframes vt-dissolve { from { opacity: 0; filter: blur(30px) saturate(3); } }
 @keyframes vt-dissolve-out { to { opacity: 0; } }
 @keyframes vt-diamond { from { clip-path: polygon(50% 50%, 50% 50%, 50% 50%, 50% 50%); } to { clip-path: polygon(50% -60%, 160% 50%, 50% 160%, -60% 50%); } }
+@keyframes vt-blur-slide-in { from { transform: translateX(8%); filter: blur(12px); opacity: 0; } }
+@keyframes vt-blur-slide-out { to { transform: translateX(-8%); filter: blur(12px); opacity: 0; } }
+@keyframes vt-scale-blur-in { from { transform: scale(1.12); filter: blur(24px); opacity: 0; } }
 @keyframes vt-split { from { clip-path: inset(50% 0 50% 0); } to { clip-path: inset(0); } }
 
 @media (prefers-reduced-motion: reduce) {

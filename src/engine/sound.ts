@@ -2,30 +2,54 @@
 // Self-contained on purpose: the export kit ships this file as-is.
 
 export interface SoundGene {
-  voice: 'blip' | 'pluck' | 'chord' | 'noise' | 'drop' | 'chip' | 'bell';
+  voice: 'blip' | 'pluck' | 'chord' | 'noise' | 'drop' | 'chip' | 'bell' | 'zzfx';
   ambient: 'none' | 'drone' | 'pulse' | 'shimmer';
   root: number; // Hz
   scale: number[]; // semitone offsets
   hoverTick: boolean;
+  // ZzFX parameter list (https://github.com/KilledByAPixel/ZzFX, MIT) when voice is 'zzfx'.
+  zzfx: number[] | null;
 }
 
 interface RngLike {
   pick<T>(items: readonly T[]): T;
   chance(p: number): boolean;
   int(min: number, max: number): number;
+  range(min: number, max: number): number;
 }
 
 const VOICES: SoundGene['voice'][] = ['blip', 'pluck', 'chord', 'noise', 'drop', 'chip', 'bell'];
 const AMBIENTS: SoundGene['ambient'][] = ['none', 'none', 'none', 'drone', 'pulse', 'shimmer'];
 const SCALES = [[0, 4, 7, 11], [0, 3, 7, 10], [0, 2, 7, 9], [0, 5, 7, 12], [0, 1, 6, 7]];
 
-export const rollSound = (rng: RngLike, hue: number): SoundGene => ({
-  voice: rng.pick(VOICES),
-  ambient: rng.pick(AMBIENTS),
-  root: Math.round(110 * 2 ** (Math.round((hue / 360) * 12) / 12) * 100) / 100, // hue picks the key
-  scale: rng.pick(SCALES),
-  hoverTick: rng.chance(0.5)
-});
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+// Seeded ZzFX sounds by archetype (own parameter ranges). Order:
+// volume, randomness, frequency, attack, sustain, release, shape, shapeCurve, slide, deltaSlide,
+// pitchJump, pitchJumpTime, repeatTime, noise, modulation, bitCrush, delay, sustainVolume, decay, tremolo, filter
+const ZZFX_ARCHETYPES: Record<string, (r: RngLike, f: number) => number[]> = {
+  coin: (r, f) => [1, 0, f * 4, 0, r.range(0.02, 0.06), r.range(0.1, 0.3), 1, 1.5, 0, 0, r.pick([200, 300, 500]), r.range(0.03, 0.08), 0, 0, 0, 0, 0, 0.7, 0.05],
+  laser: (r, f) => [1, 0, f * r.range(4, 8), 0.01, r.range(0.05, 0.15), r.range(0.1, 0.25), r.pick([2, 3]), 1.5, r.range(-30, -8), 0, 0, 0, 0, 0, 0, 0, 0, 0.8],
+  jump: (r, f) => [1, 0, f * 2, 0.02, 0.05, r.range(0.15, 0.3), 0, 1, r.range(6, 18), 0, 0, 0, 0, 0, 0, 0, 0, 0.8],
+  powerup: (r, f) => [1, 0, f * 2, 0.02, r.range(0.2, 0.4), 0.3, r.pick([0, 1, 2]), 1, r.range(2, 6), 0, r.pick([100, 200]), r.range(0.05, 0.1), r.range(0.05, 0.1), 0, 0, 0, 0, 0.7],
+  hit: (r, f) => [1, 0, f, 0, 0.02, r.range(0.15, 0.35), 4, r.range(1, 3), r.range(-10, 0), 0, 0, 0, 0, r.range(0.5, 2), 0, r.range(0, 0.3), 0, 0.6],
+  bubble: (r, f) => [1, 0, f * 3, 0.01, 0.05, 0.15, 0, 1, r.range(10, 30), r.range(5, 20), 0, 0, 0, 0, r.range(5, 30), 0, 0, 0.5],
+  robot: (r, f) => [1, 0, f * 1.5, 0.01, r.range(0.1, 0.2), 0.1, r.pick([2, 3]), 1, 0, 0, r.pick([-50, 50, 100]), 0.05, r.range(0.03, 0.06), 0, r.range(20, 80), r.range(0.1, 0.4), 0, 0.8],
+  crunch: (r, f) => [1, 0, f * 0.5, 0, 0.05, r.range(0.2, 0.5), 4, 2, 0, 0, 0, 0, 0, r.range(1, 3), 0, r.range(0.4, 0.9), r.range(0, 0.1), 0.5]
+};
+
+export const rollSound = (rng: RngLike, hue: number): SoundGene => {
+  const voice = rng.pick(VOICES);
+  const ambient = rng.pick(AMBIENTS);
+  const root = Math.round(110 * 2 ** (Math.round((hue / 360) * 12) / 12) * 100) / 100; // hue picks the key
+  const scale = rng.pick(SCALES);
+  const hoverTick = rng.chance(0.5);
+  // v0.3: half of all universes swap their voice for a seeded ZzFX sound.
+  const useZzfx = rng.chance(0.5);
+  const archetype = rng.pick(Object.keys(ZZFX_ARCHETYPES));
+  const zzfx = useZzfx ? ZZFX_ARCHETYPES[archetype](rng, root).map(r2) : null;
+  return { voice: useZzfx ? 'zzfx' : voice, ambient, root, scale, hoverTick, zzfx };
+};
 
 const note = (root: number, semis: number) => root * 2 ** (semis / 12);
 
@@ -79,12 +103,38 @@ export class SoundEngine {
     src.start(start);
   }
 
+  private zzfxBuild: ((...p: number[]) => number[]) | null = null;
+
+  private playZzfx(params: number[]) {
+    const run = () => {
+      const ctx = this.ctx!;
+      const samples = this.zzfxBuild!(...params);
+      const buf = ctx.createBuffer(1, samples.length, 44100);
+      buf.getChannelData(0).set(samples);
+      const src = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      gain.gain.value = 0.35;
+      src.buffer = buf;
+      src.connect(gain).connect(this.master!);
+      src.start();
+    };
+    if (this.zzfxBuild) return run();
+    // Lazy: ZzFX creates an AudioContext on import, so only load it after a user gesture.
+    void import('zzfx').then(({ ZZFX }) => {
+      this.zzfxBuild = (...p: number[]) => ZZFX.buildSamples(...p);
+      run();
+    });
+  }
+
   press(g: SoundGene) {
     const ctx = this.ensure();
     if (!ctx) return;
     const t = ctx.currentTime;
     const r = g.root * 2;
     switch (g.voice) {
+      case 'zzfx':
+        if (g.zzfx) this.playZzfx(g.zzfx);
+        break;
       case 'blip':
         this.tone(note(r, 12), 'sine', t, 0.18, 0.5, note(r, 0));
         break;

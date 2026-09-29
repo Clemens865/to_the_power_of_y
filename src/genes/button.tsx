@@ -1,23 +1,16 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { lazy, Suspense, type ComponentType, type CSSProperties, type ReactNode } from 'react';
 import type { Rng } from '../engine/rng';
 import { hexToRgb01, type Palette } from '../engine/palette';
-import ElectricBorder from '../vendor/react-bits/ElectricBorder/ElectricBorder';
-import GlareHover from '../vendor/react-bits/GlareHover/GlareHover';
-import Magnet from '../vendor/react-bits/Magnet/Magnet';
-import ClickSpark from '../vendor/react-bits/ClickSpark/ClickSpark';
-import SpecularButton from '../vendor/react-bits/SpecularButton/SpecularButton';
-import BorderGlow from '../vendor/react-bits/BorderGlow/BorderGlow';
-import PixelCard from '../vendor/react-bits/PixelCard/PixelCard';
-import GlassSurface from '../vendor/react-bits/GlassSurface/GlassSurface';
-import SpotlightCard from '../vendor/react-bits/SpotlightCard/SpotlightCard';
 
-import type { Shape, Skin, Idle, Press } from './buttonCss';
+import type { Shape, Skin, Idle, Press, Hover, Entrance } from './buttonCss';
 
 // Order of these lists is part of the seed contract: append, don't reorder.
 const SHAPES: Shape[] = ['pill', 'square', 'rounded', 'circle', 'blob', 'ticket', 'hex', 'slant'];
 const SKINS: Skin[] = ['solid', 'outline', 'glass', 'brutal', 'neon', 'emboss', 'gradient', 'invert', 'naked'];
 const WRAPS = ['none', 'none', 'electric', 'glare', 'specular', 'borderglow', 'pixel', 'glass', 'spotlight'] as const;
-const IDLES: Idle[] = ['none', 'none', 'breathe', 'wobble', 'float', 'spin-border'];
+const IDLES: Idle[] = ['none', 'none', 'none', 'breathe', 'wobble', 'float', 'spin-border', 'heartbeat', 'swing', 'twitch', 'glow', 'hue', 'rubber', 'tilt3d', 'sway', 'comet', 'shimmer', 'ring'];
+const HOVERS: Hover[] = ['grow', 'grow', 'lift', 'tilt', 'squish', 'nudge', 'glow', 'bright', 'shrink'];
+const ENTRANCES: Entrance[] = ['none', 'none', 'pop', 'drop', 'rise', 'spin', 'blur', 'stretch', 'flip', 'zoom'];
 const PRESSES: Press[] = ['none', 'pop', 'shake', 'jelly', 'sink', 'ripple', 'tilt'];
 
 export type Wrap = (typeof WRAPS)[number];
@@ -31,6 +24,9 @@ export interface ButtonGene {
   magnet: boolean;
   spark: boolean;
   press: Press;
+  // Rolled on their own streams in grow() (see rollHover / rollEntrance).
+  hover: Hover;
+  entrance: Entrance;
 }
 
 export const rollButton = (rng: Rng): ButtonGene => {
@@ -44,8 +40,11 @@ export const rollButton = (rng: Rng): ButtonGene => {
   // Derived from the size's low digits instead of a new rng call, so every gene rolled after the
   // button (label, transition, cursor, layout, sound) keeps its value for existing seeds.
   const press = PRESSES[Math.floor(size * 7919) % PRESSES.length];
-  return { shape, skin, wrap, idle, size, magnet, spark, press };
+  return { shape, skin, wrap, idle, size, magnet, spark, press, hover: 'grow', entrance: 'none' };
 };
+
+export const rollHover = (rng: Rng): Hover => rng.pick(HOVERS);
+export const rollEntrance = (rng: Rng): Entrance => rng.pick(ENTRANCES);
 
 export const buttonUsesWebGL = (gene: ButtonGene): boolean => gene.wrap === 'specular';
 
@@ -173,7 +172,7 @@ interface WrapSpec {
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
-const btnClass = (g: ButtonGene) => `xbtn shape-${g.shape} skin-${g.skin} idle-${g.idle} press-${g.press}`;
+const btnClass = (g: ButtonGene) => `xbtn shape-${g.shape} skin-${g.skin} idle-${g.idle} press-${g.press} hover-${g.hover}`;
 const cornerRadius = (g: ButtonGene): number => {
   const px = g.size * 16;
   if (g.shape === 'pill' || g.shape === 'circle') return 999;
@@ -233,8 +232,19 @@ const wrapSpecs = (g: ButtonGene, p: Palette): WrapSpec[] => {
   return out;
 };
 
-type AnyComponent = (props: Record<string, unknown>) => ReactNode;
-const REGISTRY: Record<string, unknown> = { ElectricBorder, GlareHover, BorderGlow, PixelCard, GlassSurface, SpotlightCard, Magnet, ClickSpark };
+// Materials load on demand; until one arrives the plain button is shown, so nothing pops in empty.
+type AnyComponent = ComponentType<Record<string, unknown>>;
+const REGISTRY = {
+  ElectricBorder: lazy(() => import('../vendor/react-bits/ElectricBorder/ElectricBorder')),
+  GlareHover: lazy(() => import('../vendor/react-bits/GlareHover/GlareHover')),
+  BorderGlow: lazy(() => import('../vendor/react-bits/BorderGlow/BorderGlow')),
+  PixelCard: lazy(() => import('../vendor/react-bits/PixelCard/PixelCard')),
+  GlassSurface: lazy(() => import('../vendor/react-bits/GlassSurface/GlassSurface')),
+  SpotlightCard: lazy(() => import('../vendor/react-bits/SpotlightCard/SpotlightCard')),
+  Magnet: lazy(() => import('../vendor/react-bits/Magnet/Magnet')),
+  ClickSpark: lazy(() => import('../vendor/react-bits/ClickSpark/ClickSpark'))
+} as unknown as Record<string, AnyComponent>;
+const SpecularButton = lazy(() => import('../vendor/react-bits/SpecularButton/SpecularButton')) as unknown as AnyComponent;
 
 export const XButton = ({ gene, palette, onPress, onHover, children }: { gene: ButtonGene; palette: Palette; onPress: (e: React.MouseEvent) => void; onHover?: () => void; children: ReactNode }) => {
   const style = {
@@ -250,22 +260,32 @@ export const XButton = ({ gene, palette, onPress, onHover, children }: { gene: B
 
   // SpecularButton is its own <button> (a button can't nest in a button), so it *becomes* ours;
   // a span carries the tokens, hover sound and press handlers it doesn't forward.
+  const plain = (
+    <button type="button" className={btnClass(gene)} style={style} onClick={onPress} onMouseEnter={onHover} aria-label="Change everything" {...handlers}>
+      <span className="xbtn-label">{children}</span>
+    </button>
+  );
   let node: ReactNode =
     gene.wrap === 'specular' ? (
-      <span className="xwrap-specular" style={style} onMouseEnter={onHover} {...handlers}>
-        <SpecularButton {...(specularProps(gene, palette) as object)} onClick={onPress}>
-          <span className="xbtn-label">{children}</span>
-        </SpecularButton>
-      </span>
+      <Suspense fallback={plain}>
+        <span className="xwrap-specular" style={style} onMouseEnter={onHover} {...handlers}>
+          <SpecularButton {...specularProps(gene, palette)} onClick={onPress}>
+            <span className="xbtn-label">{children}</span>
+          </SpecularButton>
+        </span>
+      </Suspense>
     ) : (
-      <button type="button" className={btnClass(gene)} style={style} onClick={onPress} onMouseEnter={onHover} aria-label="Change everything" {...handlers}>
-        <span className="xbtn-label">{children}</span>
-      </button>
+      plain
     );
 
   for (const w of wrapSpecs(gene, palette)) {
-    const C = REGISTRY[w.component] as AnyComponent;
-    node = <C {...w.props}>{node}</C>;
+    const C = REGISTRY[w.component];
+    const inner = node;
+    node = (
+      <Suspense fallback={inner}>
+        <C {...w.props}>{inner}</C>
+      </Suspense>
+    );
   }
   return node;
 };

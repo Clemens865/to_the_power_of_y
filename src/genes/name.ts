@@ -1,14 +1,17 @@
-import { colornames } from 'color-name-list/bestof';
-
 // Every universe gets a title: the nearest named colour to its accent, plus a number from the seed.
 // Colour names: color-name-list "best of" (MIT, https://github.com/meodai/color-names).
+// The list is ~190 KB, so it's loaded on demand and never blocks the first paint.
 const rgb = (hex: string) => {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
-const NAMES = colornames.map(c => ({ name: c.name, rgb: rgb(c.hex) }));
+type Named = { name: string; rgb: number[] };
+let names: Promise<Named[]> | null = null;
+const loadNames = () =>
+  (names ??= import('color-name-list/bestof').then(m => m.colornames.map(c => ({ name: c.name, rgb: rgb(c.hex) }))));
 
-export const universeName = (accent: string, seed: string): string => {
+export const universeName = async (accent: string, seed: string): Promise<string> => {
+  const NAMES = await loadNames();
   const [r, g, b] = rgb(accent);
   let best = NAMES[0];
   let bestD = Infinity;

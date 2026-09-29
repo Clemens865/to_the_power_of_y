@@ -1,26 +1,7 @@
-import type { CSSProperties } from 'react';
+import { lazy, Suspense, type ComponentType, type CSSProperties } from 'react';
 import type { Rng } from '../engine/rng';
 import type { Palette } from '../engine/palette';
 import type { FontGene } from '../engine/fonts';
-import ShinyText from '../vendor/react-bits/ShinyText/ShinyText';
-import GradientText from '../vendor/react-bits/GradientText/GradientText';
-import DecryptedText from '../vendor/react-bits/DecryptedText/DecryptedText';
-import FuzzyText from '../vendor/react-bits/FuzzyText/FuzzyText';
-import TextType from '../vendor/react-bits/TextType/TextType';
-import RotatingText from '../vendor/react-bits/RotatingText/RotatingText';
-import BlurText from '../vendor/react-bits/BlurText/BlurText';
-import SplitFlapText from '../vendor/react-bits/SplitFlapText/SplitFlapText';
-import ScrambledText from '../vendor/react-bits/ScrambledText/ScrambledText';
-import DepthText from '../vendor/react-bits/DepthText/DepthText';
-import EchoText from '../vendor/react-bits/EchoText/EchoText';
-import StrokeText from '../vendor/react-bits/StrokeText/StrokeText';
-import WarpText from '../vendor/react-bits/WarpText/WarpText';
-import ParticleText from '../vendor/react-bits/ParticleText/ParticleText';
-import TextPressure from '../vendor/react-bits/TextPressure/TextPressure';
-import TechText from '../vendor/react-bits/TechText/TechText';
-import FoldText from '../vendor/react-bits/FoldText/FoldText';
-import TrueFocus from '../vendor/react-bits/TrueFocus/TrueFocus';
-import SplitText from '../vendor/react-bits/SplitText/SplitText';
 
 const WORDS = ['y', 'xʸ', 'press', 'again', 'change', 'another y', 'roll', 'mutate', 'next', 'go', '↻', '✺', '?', 'y + 1', 'more', 'different', 'push', 'reroll', 'now'];
 // Order is part of the seed contract: append, don't reorder.
@@ -186,17 +167,39 @@ const specFor = (gene: LabelGene, palette: Palette, font: FontGene, color: strin
   }
 };
 
-type AnyComponent = (props: Record<string, unknown>) => React.ReactNode;
-const REGISTRY: Record<string, unknown> = {
-  ShinyText, GradientText, DecryptedText, FuzzyText, TextType, RotatingText, BlurText, SplitFlapText, ScrambledText, DepthText,
-  EchoText, StrokeText, WarpText, ParticleText, TextPressure, TechText, FoldText, TrueFocus, SplitText
-};
+// Each effect is its own lazily loaded chunk; the plain word shows until it arrives.
+type AnyComponent = ComponentType<Record<string, unknown>>;
+const REGISTRY: Record<string, AnyComponent> = {
+  ShinyText: lazy(() => import('../vendor/react-bits/ShinyText/ShinyText')),
+  GradientText: lazy(() => import('../vendor/react-bits/GradientText/GradientText')),
+  DecryptedText: lazy(() => import('../vendor/react-bits/DecryptedText/DecryptedText')),
+  FuzzyText: lazy(() => import('../vendor/react-bits/FuzzyText/FuzzyText')),
+  TextType: lazy(() => import('../vendor/react-bits/TextType/TextType')),
+  RotatingText: lazy(() => import('../vendor/react-bits/RotatingText/RotatingText')),
+  BlurText: lazy(() => import('../vendor/react-bits/BlurText/BlurText')),
+  SplitFlapText: lazy(() => import('../vendor/react-bits/SplitFlapText/SplitFlapText')),
+  ScrambledText: lazy(() => import('../vendor/react-bits/ScrambledText/ScrambledText')),
+  DepthText: lazy(() => import('../vendor/react-bits/DepthText/DepthText')),
+  EchoText: lazy(() => import('../vendor/react-bits/EchoText/EchoText')),
+  StrokeText: lazy(() => import('../vendor/react-bits/StrokeText/StrokeText')),
+  WarpText: lazy(() => import('../vendor/react-bits/WarpText/WarpText')),
+  ParticleText: lazy(() => import('../vendor/react-bits/ParticleText/ParticleText')),
+  TextPressure: lazy(() => import('../vendor/react-bits/TextPressure/TextPressure')),
+  TechText: lazy(() => import('../vendor/react-bits/TechText/TechText')),
+  FoldText: lazy(() => import('../vendor/react-bits/FoldText/FoldText')),
+  TrueFocus: lazy(() => import('../vendor/react-bits/TrueFocus/TrueFocus')),
+  SplitText: lazy(() => import('../vendor/react-bits/SplitText/SplitText')),
+} as unknown as Record<string, AnyComponent>;
 
 export const Label = ({ gene, palette, font, color, fontPx }: { gene: LabelGene; palette: Palette; font: FontGene; color: string; fontPx: number }) => {
   const spec = specFor(gene, palette, font, color, fontPx);
   if (!spec.component) return <span>{spec.children}</span>;
-  const C = REGISTRY[spec.component] as AnyComponent;
-  const node = <C {...spec.props}>{spec.children}</C>;
+  const C = REGISTRY[spec.component];
+  const node = (
+    <Suspense fallback={<span>{gene.text}</span>}>
+      <C {...spec.props}>{spec.children}</C>
+    </Suspense>
+  );
   return spec.wrapStyle ? <span style={spec.wrapStyle}>{node}</span> : node;
 };
 

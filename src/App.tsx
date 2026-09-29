@@ -21,6 +21,7 @@ import { Behaviour } from './genes/behaviour';
 const ExportPanel = lazy(() => import('./export/ExportPanel').then(m => ({ default: m.ExportPanel })));
 import { Layer } from './engine/Layer';
 
+const noop = () => {};
 const seedFromHash = () => location.hash.slice(1).replace(/[^0-9a-z]/gi, '') || null;
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -77,7 +78,7 @@ export const App = () => {
       const seed = seedFromHash();
       if (!seed) return;
       const next = grow(seed);
-      await loadFont(next.font);
+      await loadFont(next.font).catch(() => undefined);
       const root = document.documentElement;
       const { x, y } = origin.current;
       const t = next.transition;
@@ -99,9 +100,21 @@ export const App = () => {
           setGenome(next);
           setCount(c => c + 1);
         });
-      if (document.startViewTransition && !reducedMotion()) document.startViewTransition(apply);
-      else apply();
-      if (heard.current) sound.current.ambient(next.sound);
+      try {
+        if (document.startViewTransition && !reducedMotion()) document.startViewTransition(apply);
+        else apply();
+      } catch (err) {
+        // A failed transition must not strand the page on the old universe.
+        console.warn('[xʸ] transition failed, switching directly:', err);
+        apply();
+      }
+      if (heard.current) {
+        try {
+          sound.current.ambient(next.sound);
+        } catch (err) {
+          console.warn('[xʸ] ambient sound failed:', err);
+        }
+      }
     };
     addEventListener('hashchange', onHash);
     return () => removeEventListener('hashchange', onHash);
@@ -111,12 +124,18 @@ export const App = () => {
     origin.current = e && e.clientX ? { x: e.clientX, y: e.clientY } : { x: innerWidth / 2, y: innerHeight / 2 };
     heard.current = true;
     const current = genomeRef.current;
-    sound.current.press(current.sound);
-    void fireBurst(current.burst, current.palette, origin.current.x, origin.current.y);
+    // Schedule the new universe FIRST: sound and bursts are extras and must never be able to stop a press
+    // (e.g. a browser that refuses to create audio used to swallow the click entirely).
     // A beat of delay lets the press animation register before the universe is replaced.
     setTimeout(() => {
       location.hash = newSeed();
     }, 120);
+    try {
+      sound.current.press(current.sound);
+    } catch (err) {
+      console.warn('[xʸ] press sound failed:', err);
+    }
+    fireBurst(current.burst, current.palette, origin.current.x, origin.current.y).catch(err => console.warn('[xʸ] burst failed:', err));
   }, []);
 
   useEffect(() => {
@@ -167,11 +186,14 @@ export const App = () => {
         <Decor items={decorFor(layout, { seed, word: label.text, count, palette, tagline: voice.tagline, hint: voice.hint })} />
       </Layer>
 
-      <div className={`spot${rarity !== 'common' ? ' rarity-holo' : ''}`} style={{ left: `${layout.x}%`, top: `${layout.y}%` }}>
+      {/* The whole button area takes the click, not just the inner <button>: materials (specular, pixel card, glass, …)
+          draw beyond it, and press/tilt transforms can move the button out from under a mouse-up. Keyboard presses
+          on the <button> produce a click that bubbles here too. */}
+      <div className={`spot${rarity !== 'common' ? ' rarity-holo' : ''}`} style={{ left: `${layout.x}%`, top: `${layout.y}%` }} onClick={press}>
         <div key={`e${seed}`} className={`entrance enter-${button.entrance}`}>
         <Layer name={`button:${button.wrap}/${label.effect}`}>
           <Behaviour gene={genome.behaviour}>
-          <XButton gene={button} palette={palette} onPress={press} onHover={() => sound.current.hover(genome.sound)}>
+          <XButton gene={button} palette={palette} onPress={noop} onHover={() => sound.current.hover(genome.sound)}>
             <Layer name={`label:${label.effect}`} fallback={<span>{label.text}</span>}>
               <Label gene={label} palette={palette} font={font} color={labelColor(button, palette)} fontPx={button.size * 16} />
             </Layer>

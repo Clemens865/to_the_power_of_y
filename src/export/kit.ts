@@ -25,6 +25,7 @@ const RB_IMPORT = /^import (\w+) from '\.\/components\/\1\/\1';$/;
 const NAMED_IMPORT = /^import \{ ([\w, ]+) \} from '([^']+)';$/;
 
 // Everything the component needs, gathered from each gene's own kit generator.
+// The click is handled on the whole button area (.xy-spot), not the inner <button>, as on the live site.
 const parts = (g: Genome) => {
   const color = labelColor(g.button, g.palette);
   const label = labelKit(g.label, g.palette, g.font, color, g.button.size * 16);
@@ -154,9 +155,9 @@ export default function Universe({ onPress }: { onPress?: () => void }) {
       <div className="layout" aria-hidden>
         ${k.decor.jsx}
       </div>
-      <div className="xy-spot${g.rarity !== 'common' ? ' rarity-holo' : ''}" style={{ left: '${g.layout.x}%', top: '${g.layout.y}%' }}>
+      <div className="xy-spot${g.rarity !== 'common' ? ' rarity-holo' : ''}" style={{ left: '${g.layout.x}%', top: '${g.layout.y}%' }} onClick={press}>
         <div className="entrance enter-${g.button.entrance}">
-        ${k.behaviour.jsx(k.button.jsx)}
+        ${k.behaviour.jsx(k.button.jsx.split(' onClick={press}').join(''))}
         </div>
       </div>
       ${g.rarity !== 'common' ? `<div className="rarity-badge">{${js(RARITY_LABEL[g.rarity])}}</div>` : ''}

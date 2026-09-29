@@ -2,6 +2,7 @@ import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import type { Rng } from '../engine/rng';
 import { hexToRgb01, type Palette } from '../engine/palette';
 import { SHADER_IDS, shaderProps } from './shaders/props';
+import { THREE_SCENE_IDS, threeSceneProps } from './three/props';
 import { TSP_PRESETS, TSP_PACKAGE, TSP_LOADER, tsParticlesOptions, type TspPreset } from './bg/tsparticlesOptions';
 import { VANTA_EFFECTS, vantaOptions } from './bg/vantaOptions';
 
@@ -15,7 +16,7 @@ interface BackgroundDef {
   name?: string;
   /** 'rb' = React Bits (default), 'paper' = @paper-design/shaders-react, 'paperImage' = Paper image filters on a
    *  generated picture, 'tsp' = tsParticles preset, 'vanta' = Vanta.js effect. */
-  source?: 'rb' | 'paper' | 'paperImage' | 'tsp' | 'vanta' | 'shader';
+  source?: 'rb' | 'paper' | 'paperImage' | 'tsp' | 'vanta' | 'shader' | 'three';
   /** false for canvas-2D / DOM renderers. Defaults to true (except the legacy 2D ids below). */
   webgl?: boolean;
   /** Only eligible for palettes that pass this test. */
@@ -305,7 +306,17 @@ const SHADER_ADDED: Record<string, BackgroundDef> = Object.fromEntries(
   ])
 );
 
-const DEFS: Record<string, BackgroundDef> = { ...LEGACY, ...RB_ADDED, ...PAPER_ADDED, ...TSP_ADDED, ...VANTA_ADDED, ...PAPER_IMAGE_ADDED, ...SHADER_ADDED };
+// v0.5 additions — the xʸ original 3D pack: real three.js scenes (our own code, shipped in export kits).
+// props.ts has no three import; the renderer and scenes load with the lazily imported component.
+const ThreeBg = lazy(() => import('./three/ThreeScene'));
+const THREE_ADDED: Record<string, BackgroundDef> = Object.fromEntries(
+  THREE_SCENE_IDS.map(id => [
+    'three' + id.charAt(0).toUpperCase() + id.slice(1),
+    { source: 'three', Component: ThreeBg, props: (r: Rng, p: Palette) => ({ ...threeSceneProps(id, r, p) }) } satisfies BackgroundDef
+  ])
+);
+
+const DEFS: Record<string, BackgroundDef> = { ...LEGACY, ...RB_ADDED, ...PAPER_ADDED, ...TSP_ADDED, ...VANTA_ADDED, ...PAPER_IMAGE_ADDED, ...SHADER_ADDED, ...THREE_ADDED };
 
 // Canvas-2D / DOM renderers among the v0.1 pool.
 const LEGACY_2D = new Set(['waves', 'dotGrid', 'letterGlitch']);
@@ -327,8 +338,12 @@ const tidy = (v: unknown): unknown =>
         ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, tidy(x)]))
         : v;
 
+const THREE_D_SOURCES = new Set(['three', 'vanta']);
+
 export const rollBackground = (rng: Rng, p: Palette): BackgroundGene => {
-  const ids = BACKGROUND_IDS.filter(id => DEFS[id].when?.(p) ?? true);
+  const eligible = BACKGROUND_IDS.filter(id => DEFS[id].when?.(p) ?? true);
+  // Real 3D scenes (our three.js pack and Vanta) are favourites, so they come up twice as often.
+  const ids = eligible.flatMap(id => (THREE_D_SOURCES.has(DEFS[id].source ?? 'rb') ? [id, id] : [id]));
   const id = rng.pick(ids);
   const props = Object.fromEntries(Object.entries(DEFS[id].props(rng, p)).map(([k, v]) => [k, tidy(v)]));
   return { id, props };
@@ -340,6 +355,8 @@ const isPaper = (id: string) => DEFS[id]?.source === 'paper';
 export const backgroundComponentName = (id: string) => DEFS[id]?.name ?? id.charAt(0).toUpperCase() + id.slice(1);
 
 export const isShaderBackground = (id: string) => DEFS[id]?.source === 'shader';
+export const isVantaBackground = (id: string) => DEFS[id]?.source === 'vanta';
+export const isThreeBackground = (id: string) => DEFS[id]?.source === 'three';
 
 export const backgroundUsesWebGL = (id: string): boolean => {
   const def = DEFS[id];
@@ -383,7 +400,7 @@ export const backgroundKit = (gene: BackgroundGene): { importLine: string | null
   const source = DEFS[gene.id]?.source;
   if (source === 'tsp') return tspKit(gene);
   // The shader pack's kit output (with its GLSL) is produced by kit.ts via ./shaders, which only the lazy kit imports.
-  if (source === 'shader') return { importLine: null, jsx: '', install: [] };
+  if (source === 'shader' || source === 'three') return { importLine: null, jsx: '', install: [] };
   if (source === 'vanta') return notExportable(gene, `Vanta.js ${String(gene.props.effect)}`, 'npm i vanta three');
   if (source === 'paperImage') return notExportable(gene, `Paper ${name} over a generated picture`, 'npm i @paper-design/shaders-react');
   if (isPaper(gene.id)) {

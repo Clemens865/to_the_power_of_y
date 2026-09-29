@@ -16,6 +16,8 @@ dist/
 .swarm/
 .mcp.json
 ruvector.db
+vectors.db
+*.db
 CLAUDE.md
 AGENTS.md
 

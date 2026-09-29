@@ -1,88 +1,85 @@
 import { zipSync, strToU8 } from 'fflate';
 import type { Genome } from '../engine/genome';
-import { backgroundComponentName } from '../genes/backgrounds';
+import { fontUrl, fontVariationCss } from '../engine/fonts';
+import { backgroundKit } from '../genes/backgrounds';
 import { buttonCssFor } from '../genes/buttonCss';
-import { labelColor } from '../genes/button';
+import { buttonKit, labelColor, pressNeedsJs, PRESS_HELPER_SOURCE } from '../genes/button';
+import { labelKit } from '../genes/label';
 import { cursorCss, cursorEffectInfo } from '../genes/cursor';
-import { decorFor, LAYOUT_CSS } from '../genes/layout';
+import { decorKit, LAYOUT_CSS } from '../genes/layout';
+import { overlayKit } from '../genes/overlay';
+import { RARITY_CSS, RARITY_LABEL } from '../genes/rarity';
+import { BURST_CSS } from '../genes/burst';
 import soundSource from '../engine/sound.ts?raw';
+import zzfxTypesSource from '../types/zzfx.d.ts?raw';
 import trailsSource from '../genes/trails.tsx?raw';
 
 // Builds a "keep this y" kit: a React component that reproduces one universe.
-// React Bits source is NOT bundled (its licence restricts redistribution); the README
-// lists the official shadcn install command for each component instead.
-
-const LABEL_COMPONENTS: Record<string, string | null> = {
-  plain: null, shiny: 'ShinyText', gradient: 'GradientText', decrypt: 'DecryptedText',
-  fuzzy: 'FuzzyText', type: 'TextType', rotate: 'RotatingText', blur: 'BlurText'
-};
+// Third-party component source is NOT bundled (React Bits and similar licences restrict redistribution);
+// the README lists the official install command for each component instead.
 
 const js = (v: unknown) => JSON.stringify(v);
-const spread = (props: Record<string, unknown>) => `{...${JSON.stringify(props)}}`;
+const RB_IMPORT = /^import (\w+) from '\.\/components\/\1\/\1';$/;
+const NAMED_IMPORT = /^import \{ ([\w, ]+) \} from '([^']+)';$/;
 
-const labelJsx = (g: Genome): string => {
-  const { text, speed, effect } = g.label;
+// Everything the component needs, gathered from each gene's own kit generator.
+const parts = (g: Genome) => {
   const color = labelColor(g.button, g.palette);
-  const p = g.palette;
-  const round = (n: number) => Math.round(n * 100) / 100;
-  switch (effect) {
-    case 'shiny': return `<ShinyText text={${js(text)}} color={${js(color)}} shineColor={${js(p.accent3)}} speed={${round(2 / speed)}} />`;
-    case 'gradient': return `<GradientText colors={${js([p.accent, p.accent2, p.accent3, p.accent])}} animationSpeed={${round(6 / speed)}}>{${js(text)}}</GradientText>`;
-    case 'decrypt': return `<DecryptedText text={${js(text)}} animateOn="view" speed={${round(40 / speed)}} maxIterations={14} sequential revealDirection="center" />`;
-    case 'fuzzy': return `<FuzzyText fontSize={${round(g.button.size * 16)}} fontWeight={${g.font.weight}} fontFamily={${js(`"${g.font.family}"`)}} color={${js(color)}} baseIntensity={${round(0.12 * speed)}} hoverIntensity={0.5} enableHover>{${js(text)}}</FuzzyText>`;
-    case 'type': return `<TextType text={${js([text, 'xʸ', text])}} typingSpeed={${round(70 / speed)}} pauseDuration={1800} showCursor cursorCharacter="▍" />`;
-    case 'rotate': return `<RotatingText texts={${js([text, 'xʸ', 'y', text])}} rotationInterval={${round(1600 / speed)}} staggerDuration={0.02} splitBy="characters" />`;
-    case 'blur': return `<BlurText text={${js(text)}} animateBy="letters" delay={${round(60 / speed)}} direction="top" />`;
-    default: return `<span>{${js(text)}}</span>`;
+  const label = labelKit(g.label, g.palette, g.font, color, g.button.size * 16);
+  const button = buttonKit(g.button, g.palette, label.jsx);
+  const decor = decorKit(g.layout, { seed: g.seed, word: g.label.text, count: 0, palette: g.palette, tagline: g.voice.tagline, hint: g.voice.hint });
+  const background = backgroundKit(g.background);
+  const overlay = overlayKit(g.overlay);
+  const cursor = cursorEffectInfo(g.cursor);
+
+  const rb = new Set<string>([...label.components, ...button.components, ...decor.components]);
+  if (cursor?.rb) rb.add(cursor.rb);
+  const rawImports = [background.importLine, overlay.importLine].filter((l): l is string => !!l);
+  const named = new Map<string, Set<string>>();
+  for (const line of rawImports) {
+    const m = line.match(RB_IMPORT);
+    if (m) rb.add(m[1]);
+    const n = line.match(NAMED_IMPORT);
+    if (n) n[1].split(',').forEach(name => (named.get(n[2]) ?? named.set(n[2], new Set()).get(n[2])!).add(name.trim()));
   }
+  const install = new Set<string>(['npm i ogl three gsap motion', ...background.install, ...overlay.install]);
+  if (g.sound.voice === 'zzfx') install.add('npm i zzfx');
+  const hasConfetti = g.burst.kind !== 'none' && g.burst.kind !== 'shockwave';
+  if (hasConfetti) install.add('npm i @tsparticles/confetti');
+  for (const c of rb) install.add(`npx shadcn@latest add @react-bits/${c}-TS-CSS`);
+  return { label, button, decor, background, overlay, cursor, rb: [...rb], named, install: [...install], hasConfetti };
 };
 
-const buttonJsx = (g: Genome): string => {
-  const b = g.button;
+const burstOptions = (g: Genome) => {
+  const b = g.burst;
   const p = g.palette;
-  let node = `<button type="button" className="xbtn shape-${b.shape} skin-${b.skin} idle-${b.idle}" style={{ color: ${js(labelColor(b, p))} }} onClick={press} onMouseEnter={() => sound.current.hover(SOUND)}>
-          <span className="xbtn-label">${labelJsx(g)}</span>
-        </button>`;
-  if (b.wrap === 'electric') node = `<ElectricBorder color={${js(p.accent)}} speed={1} chaos={0.12} borderRadius={${b.shape === 'pill' || b.shape === 'circle' ? 999 : 12}}>\n        ${node}\n        </ElectricBorder>`;
-  if (b.wrap === 'glare') node = `<GlareHover width="auto" height="auto" background="transparent" borderColor="transparent" borderRadius="999px" glareColor={${js(p.fg)}} glareOpacity={0.4}>\n        ${node}\n        </GlareHover>`;
-  if (b.magnet) node = `<Magnet padding={120} magnetStrength={3}>\n        ${node}\n        </Magnet>`;
-  if (b.spark) node = `<ClickSpark sparkColor={${js(p.accent2)}} sparkCount={12} sparkRadius={40} sparkSize={14}>\n        ${node}\n        </ClickSpark>`;
-  return node;
-};
-
-const decorJsx = (g: Genome): string =>
-  decorFor(g.layout, { seed: g.seed, word: g.label.text, count: 0 })
-    .map(it =>
-      'circular' in it
-        ? `<div className="lay-orbit"><CircularText text={${js(it.circular)}} spinDuration={24} onHover="speedUp" /></div>`
-        : `<div className={${js(it.cls)}}${it.style ? ` style={${js(it.style)}}` : ''}>${it.text ? `{${js(it.text)}}` : ''}</div>`
-    )
-    .join('\n        ');
-
-export const reactBitsUsed = (g: Genome): string[] => {
-  const used = new Set<string>([backgroundComponentName(g.background.id)]);
-  const label = LABEL_COMPONENTS[g.label.effect];
-  if (label) used.add(label);
-  if (g.button.wrap === 'electric') used.add('ElectricBorder');
-  if (g.button.wrap === 'glare') used.add('GlareHover');
-  if (g.button.magnet) used.add('Magnet');
-  if (g.button.spark) used.add('ClickSpark');
-  if (g.layout.kind === 'orbit') used.add('CircularText');
-  const c = cursorEffectInfo(g.cursor);
-  if (c?.rb) used.add(c.rb);
-  return [...used];
+  const base = { particleCount: b.count, spread: b.spread, startVelocity: b.velocity, gravity: b.gravity, scalar: b.scalar, colors: [p.accent, p.accent2, p.accent3, p.fg], zIndex: 45 };
+  const byKind: Record<string, object> = {
+    confetti: { shapes: ['square', 'circle'] },
+    stars: { shapes: ['star'] },
+    hearts: { shapes: ['heart'] },
+    suits: { shapes: ['spades', 'hearts', 'diamonds', 'clubs'] },
+    firework: { shapes: ['circle'], spread: 360, startVelocity: 45, gravity: 0.6, ticks: 120 },
+    snow: { shapes: ['circle'], spread: 360, startVelocity: 12, gravity: 0.25, drift: 0.5, ticks: 260, colors: ['#ffffff', p.fg] },
+    emoji: { shapes: ['emoji'], shapeOptions: { emoji: { value: b.emoji } }, scalar: b.scalar * 2 }
+  };
+  return { ...base, ...byKind[b.kind] };
 };
 
 export const universeTsx = (g: Genome): string => {
-  const bg = backgroundComponentName(g.background.id);
-  const cursor = cursorEffectInfo(g.cursor);
-  const imports = reactBitsUsed(g).map(n => `import ${n} from './components/${n}/${n}';`);
-  if (cursor?.trail) imports.push(`import { Trails } from './trails';`);
-  const cursorNode = !cursor ? '' : cursor.trail
-    ? `<Trails mode={${js(cursor.trail)}} {...${js(g.cursor.props)}} text={${js(g.label.text)}} />`
-    : `<CursorLayer><${cursor.rb} ${spread(g.cursor.props)} /></CursorLayer>`;
+  const k = parts(g);
+  const imports = [
+    ...k.rb.map(n => `import ${n} from './components/${n}/${n}';`),
+    ...[...k.named].map(([mod, names]) => `import { ${[...names].join(', ')} } from '${mod}';`)
+  ];
+  if (k.cursor?.trail) imports.push(`import { Trails } from './trails';`);
+  if (k.hasConfetti) imports.push(`import { confetti } from '@tsparticles/confetti';`);
+
+  const cursorNode = !k.cursor ? '' : k.cursor.trail
+    ? `<Trails mode={${js(k.cursor.trail)}} {...${js(g.cursor.props)}} text={${js(g.label.text)}} />`
+    : `<CursorLayer><${k.cursor.rb} {...${js(g.cursor.props)}} /></CursorLayer>`;
   // Several React Bits cursors only listen on their own container; forward real pointer events into it.
-  const cursorLayer = cursor?.rb
+  const cursorLayer = k.cursor?.rb
     ? `
 function CursorLayer({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -105,40 +102,54 @@ function CursorLayer({ children }: { children: ReactNode }) {
 `
     : '';
 
-  return `// xʸ universe  y = ${g.seed}
+  const burst =
+    g.burst.kind === 'shockwave'
+      ? `const ring = document.createElement('div');
+    ring.className = 'burst-shockwave';
+    ring.style.cssText = \`left:\${e?.clientX ?? innerWidth / 2}px;top:\${e?.clientY ?? innerHeight / 2}px;--ring:${g.palette.accent}\`;
+    document.body.appendChild(ring);
+    setTimeout(() => ring.remove(), 900);`
+      : k.hasConfetti
+        ? `void confetti({ ...BURST, origin: { x: (e?.clientX ?? innerWidth / 2) / innerWidth, y: (e?.clientY ?? innerHeight / 2) / innerHeight } });`
+        : '';
+
+  return `// xʸ universe  y = ${g.seed}  —  ${g.name}${g.rarity !== 'common' ? `  (${RARITY_LABEL[g.rarity]})` : ''}
 // Generated by "x to the power of y". Recreates this exact page as one React component.
-import { useEffect, useRef${cursor?.rb ? ', type ReactNode' : ''} } from 'react';
+import { useEffect, useRef${k.cursor?.rb ? ', type ReactNode' : ''} } from 'react';
 ${imports.join('\n')}
 import { SoundEngine, type SoundGene } from './sound';
 import './universe.css'; // last, so it wins over the components' own CSS
 
 const SOUND: SoundGene = ${js(g.sound)};
-${cursorLayer}
+${k.hasConfetti ? `const BURST = ${js(burstOptions(g))};\n` : ''}${cursorLayer}${pressNeedsJs(g.button.press) ? PRESS_HELPER_SOURCE : ''}
 export default function Universe({ onPress }: { onPress?: () => void }) {
   const sound = useRef(new SoundEngine());
   const started = useRef(false);
   useEffect(() => () => sound.current.stopAmbient(), []);
 
-  const press = () => {
+  const press = (e?: { clientX: number; clientY: number }) => {
     sound.current.press(SOUND);
     if (!started.current) {
       started.current = true;
       sound.current.ambient(SOUND); // audio may only start after a user gesture
     }
+    ${burst}
     onPress?.();
   };
 
   return (
-    <main className="xy-stage">
+    <main className="xy-stage${g.rarity === 'mythic' ? ' rarity-mythic' : ''}">
       <div className="xy-bg" aria-hidden>
-        <${bg} ${spread(g.background.props)} />
+        ${k.background.jsx}
       </div>
+      ${k.overlay.jsx}
       <div className="layout" aria-hidden>
-        ${decorJsx(g)}
+        ${k.decor.jsx}
       </div>
-      <div className="xy-spot" style={{ left: '${g.layout.x}%', top: '${g.layout.y}%' }}>
-        ${buttonJsx(g)}
+      <div className="xy-spot${g.rarity !== 'common' ? ' rarity-holo' : ''}" style={{ left: '${g.layout.x}%', top: '${g.layout.y}%' }}>
+        ${k.button.jsx}
       </div>
+      ${g.rarity !== 'common' ? `<div className="rarity-badge">{${js(RARITY_LABEL[g.rarity])}}</div>` : ''}
       ${cursorNode}
     </main>
   );
@@ -148,9 +159,10 @@ export default function Universe({ onPress }: { onPress?: () => void }) {
 
 export const universeCss = (g: Genome): string => {
   const { palette: p, font: f } = g;
-  const hides = cursorEffectInfo(g.cursor)?.hidesCursor;
-  return `/* xʸ universe y = ${g.seed} — ${p.mood} palette, ${f.family} */
-@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(f.family)}:wght@${f.weight}&display=swap');
+  const k = parts(g);
+  const hides = k.cursor?.hidesCursor;
+  return `/* xʸ universe y = ${g.seed} — ${g.name} — ${p.mood} palette, ${f.family} */
+@import url('${fontUrl(f.family).replace('display=block', 'display=swap')}');
 
 .xy-stage {
   --bg: ${p.bg}; --fg: ${p.fg}; --a1: ${p.accent}; --a2: ${p.accent2}; --a3: ${p.accent3};
@@ -163,53 +175,50 @@ export const universeCss = (g: Genome): string => {
 }
 .xy-bg { position: absolute; inset: 0; }
 .xy-bg > * { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; }
-.xy-spot { position: absolute; transform: translate(-50%, -50%); }
+.xy-spot { position: absolute; transform: translate(-50%, -50%); z-index: 2; }
 .cursor-layer { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
 .cursor-layer > * { width: 100%; height: 100%; }
-.xbtn .shiny-text, .xbtn .animated-gradient-text, .xbtn .text-type, .xbtn .text-rotate { font: inherit; margin: 0; }
-.xbtn .animated-gradient-text { backdrop-filter: none; border-radius: 0; overflow: visible; }
-${buttonCssFor(g.button.shape, g.button.skin, g.button.idle)}
+${fontVariationCss(f, '.xbtn-label')}
+${buttonCssFor(g.button.shape, g.button.skin, g.button.idle, g.button.press)}
 ${g.layout.kind === 'bare' ? '' : LAYOUT_CSS}
+${k.overlay.css}
+${g.rarity !== 'common' ? RARITY_CSS : ''}
+${g.burst.kind === 'shockwave' ? BURST_CSS : ''}
 @media (prefers-reduced-motion: reduce) { .xbtn, .xbtn::before { animation: none !important; } }
 `;
 };
 
 export const readme = (g: Genome, link: string): string => {
-  const comps = reactBitsUsed(g);
-  const cursor = cursorEffectInfo(g.cursor);
-  return `# xʸ universe \`${g.seed}\`
+  const k = parts(g);
+  return `# xʸ universe \`${g.seed}\` — ${g.name}
 
-Live: ${link}
+Live: ${link}${g.rarity !== 'common' ? `\n\n**${RARITY_LABEL[g.rarity]}**` : ''}
 
 | Layer | Value |
 | --- | --- |
 | Palette | ${g.palette.mood} · bg ${g.palette.bg} · fg ${g.palette.fg} · ${g.palette.accent} ${g.palette.accent2} ${g.palette.accent3} |
-| Font | ${g.font.family} ${g.font.weight}${g.font.italic ? ' italic' : ''}, ${g.font.transform}, tracking ${g.font.tracking} |
-| Background | ${backgroundComponentName(g.background.id)} (React Bits) |
-| Button | ${g.button.shape} · ${g.button.skin} · idle ${g.button.idle}${g.button.wrap !== 'none' ? ` · ${g.button.wrap} border` : ''}${g.button.magnet ? ' · magnetic' : ''}${g.button.spark ? ' · click sparks' : ''} |
-| Label | "${g.label.text}" · ${g.label.effect} |
+| Font | ${g.font.family} ${g.font.weight}${g.font.italic ? ' italic' : ''}, ${g.font.transform}, tracking ${g.font.tracking}${Object.keys(g.font.axes).length ? ` · axes ${Object.entries(g.font.axes).map(([t, v]) => `${t} ${v}`).join(', ')}` : ''}${g.font.pulse ? ` · breathing ${g.font.pulse.tag}` : ''} |
+| Background | ${g.background.id} |
+| Overlay | ${g.overlay.kind} |
+| Button | ${g.button.shape} · ${g.button.skin} · idle ${g.button.idle} · press ${g.button.press}${g.button.wrap !== 'none' ? ` · ${g.button.wrap}` : ''}${g.button.magnet ? ' · magnetic' : ''}${g.button.spark ? ' · click sparks' : ''} |
+| Label | "${g.label.text}" · ${g.label.effect} · ${g.voice.tone} voice |
 | Layout | ${g.layout.kind} · button at ${g.layout.x}% / ${g.layout.y}% |
-| Cursor | ${g.cursor.css}${cursor ? ` + ${cursor.rb ?? `${cursor.trail} trail`}` : ''} |
+| Cursor | ${g.cursor.css}${k.cursor ? ` + ${k.cursor.rb ?? `${k.cursor.trail} trail`}` : ''} |
+| Burst | ${g.burst.kind} |
 | Sound | ${g.sound.voice} press${g.sound.ambient !== 'none' ? ` · ${g.sound.ambient} ambient` : ''} · root ${g.sound.root} Hz |
 
 ## Rebuild it in a React + TypeScript project
 
-1. Install runtime dependencies:
+1. Install dependencies and components:
 
    \`\`\`sh
-   npm i ogl three gsap motion
+${k.install.map(c => `   ${c}`).join('\n')}
    \`\`\`
 
-2. Add the React Bits components through their official registry (CSS variants):
-
-   \`\`\`sh
-${comps.map(c => `   npx shadcn@latest add @react-bits/${c}-TS-CSS`).join('\n')}
-   \`\`\`
-
-   The imports in \`Universe.tsx\` expect \`./components/<Name>/<Name>\`; adjust them to wherever the CLI put the files.
+   The React Bits imports in \`Universe.tsx\` expect \`./components/<Name>/<Name>\`; adjust them to wherever the CLI put the files.
    React Bits is MIT + Commons Clause: fine inside your site or app, not for re-selling the components themselves.
 
-3. Copy \`Universe.tsx\`, \`universe.css\` and \`sound.ts\`${cursor?.trail ? ' and `trails.tsx`' : ''} next to each other and render \`<Universe />\`.
+2. Copy the files in this folder next to each other and render \`<Universe />\`.
 
 \`recipe.json\` holds the full genome. Opening the live link with the same seed always regenerates this universe.
 `;
@@ -221,6 +230,7 @@ export const buildKit = (g: Genome, link: string) => {
     'Universe.tsx': universeTsx(g),
     'universe.css': universeCss(g),
     'sound.ts': soundSource,
+    'zzfx.d.ts': zzfxTypesSource,
     'recipe.json': JSON.stringify(g, null, 2)
   };
   if (cursorEffectInfo(g.cursor)?.trail) files['trails.tsx'] = trailsSource;

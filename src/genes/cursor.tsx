@@ -105,6 +105,15 @@ const EFFECTS: Record<LibraryKind, { Component: LazyExoticComponent<ComponentTyp
 
 const isTrail = (k: EffectKind): k is TrailMode => (TRAIL_KINDS as string[]).includes(k);
 
+const WEBGL_CURSORS = new Set<EffectKind>(['splash', 'glow', 'ribbons', 'swarm', 'ghost']);
+export const cursorUsesWebGL = (gene: CursorGene) => gene.effect !== 'none' && WEBGL_CURSORS.has(gene.effect);
+
+// Swap a WebGL cursor effect for a cheap 2D one (used by the GPU budget in grow()).
+export const downgradeCursor = (gene: CursorGene, rng: Rng, p: Palette): CursorGene => {
+  const effect = rng.pick(TRAIL_KINDS);
+  return { ...gene, effect, props: trailProps(rng, p) };
+};
+
 const trailProps = (r: Rng, p: Palette) => ({ colors: [p.accent, p.accent2, p.accent3], size: r.int(6, 16), dark: p.isLight ? p.fg : '#000' });
 
 const round = (n: number) => Math.round(n * 1000) / 1000;

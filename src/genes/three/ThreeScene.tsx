@@ -10,16 +10,18 @@ export interface ThreeSceneProps {
   bg: string;
   params?: number[];
   speed?: number;
+  /** Extra seeded numbers used by composed (still-life) scenes. */
+  layout?: number[];
 }
 
 const MAX_DPR = 1.25;
 const REDUCED_MOTION = 0.2;
 
-export default function ThreeScene({ scene: id, colors, bg, params = [], speed = 1 }: ThreeSceneProps) {
+export default function ThreeScene({ scene: id, colors, bg, params = [], speed = 1, layout = [] }: ThreeSceneProps) {
   const ref = useRef<HTMLDivElement>(null);
   const speedRef = useRef(speed);
   speedRef.current = speed;
-  const key = [id, bg, colors.join(), params.join()].join('|');
+  const key = [id, bg, colors.join(), params.join(), layout.join()].join('|');
 
   useEffect(() => {
     const el = ref.current;
@@ -55,9 +57,13 @@ export default function ThreeScene({ scene: id, colors, bg, params = [], speed =
       uFog: { value: new THREE.Vector2(4, 40) },
       uInk: { value: 1 }
     };
-    const lum = 0.2126 * bgColor.r + 0.7152 * bgColor.g + 0.0722 * bgColor.b;
-    uniforms.uInk.value = lum > 0.3 ? 1.5 : 1;
-    const ctx: SceneCtx = { scene, camera, colors: cols, bg: bgColor, params: p, isLight: lum > 0.3, uniforms, rng: seeded(p[0] + p[1] * 7 + p[2] * 13 + p[3] * 31) };
+    const lumOf = (c: THREE.Color) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    // "Light" means the ink is darker than the ground: paint it normally. Only glow (additive) when the lines are
+    // brighter than the background — adding dark ink onto a mid-tone ground (e.g. red on red) makes it vanish.
+    const inkLum = (lumOf(cols[0]) + lumOf(cols[1]) + lumOf(cols[2])) / 3;
+    const isLight = inkLum < lumOf(bgColor);
+    uniforms.uInk.value = isLight ? 1.5 : 1;
+    const ctx: SceneCtx = { scene, camera, colors: cols, bg: bgColor, params: p, layout, isLight, uniforms, rng: seeded(p[0] + p[1] * 7 + p[2] * 13 + p[3] * 31) };
     const inst = build(ctx);
     // Scenes displace vertices on the GPU, so CPU bounding volumes are meaningless.
     scene.traverse(o => (o.frustumCulled = false));

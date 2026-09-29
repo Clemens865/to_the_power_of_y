@@ -49,7 +49,7 @@ export const grow = (seed: string): Genome => {
   const rolled = rollPalette(rng);
   const palette = rarity === 'legendary' ? GILDED : rolled;
   const font = rollFont(rng);
-  const background = rollBackground(rng, palette);
+  let background = rollBackground(rng, palette);
   let button = rollButton(rng);
   let label = rollLabel(rng);
   const transition = rollTransition(rng);
@@ -62,6 +62,16 @@ export const grow = (seed: string): Genome => {
   const behaviour = rollBehaviour(sub('behaviour'));
 
   label = { ...label, text: voice.word };
+
+  // 3D still lifes compose around a centred button. When the layout moves the button off-centre, put the hero
+  // object on the other side and leave out companions, so nothing sits behind the button.
+  const still = background.props.layout as number[] | undefined;
+  if (background.id.startsWith('threeStill') && still && layout.x !== 50) {
+    const composed = [...still];
+    composed[1] = layout.x < 50 ? 0.75 : 0.25; // hero right of a left-hand button, left of a right-hand one
+    composed[2] = 0; // no companions
+    background = { ...background, props: { ...background.props, layout: composed } };
+  }
   button = { ...button, hover: rollHover(sub('hover')), entrance: rollEntrance(sub('entrance')) };
   // Legendary and mythic universes always celebrate.
   if ((rarity === 'legendary' || rarity === 'mythic') && burst.kind === 'none') burst = { ...burst, kind: 'stars' };

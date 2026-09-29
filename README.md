@@ -6,7 +6,7 @@ xʸ is an experimental random-machine website. The page holds a single button (t
 
 The **y** is a seed, a 12-character code that grows a full "genome" of design decisions. The same y always grows the same universe, so every page you land on can be shared, revisited and exported.
 
-> **About 10³³ combinations**, counting only the listed choices of each layer (14,584 palettes × 3,210 font styles × 119 backgrounds × 13 textures × 83 million button looks × 6 behaviours × 1,520 labels × …). Continuous values such as speeds, sizes, generated palettes and font axes aren't counted and push it far higher. A 12-character seed can reach about 281 trillion of them: pressing once a second, you'd need nearly 9 million years to see them all.
+> **About 10³³ combinations**, counting only the listed choices of each layer (14,584 palettes × 3,210 font styles × 127 backgrounds × 13 textures × 83 million button looks × 6 behaviours × 1,520 labels × …). Continuous values such as speeds, sizes, generated palettes and font axes aren't counted and push it far higher. A 12-character seed can reach about 281 trillion of them: pressing once a second, you'd need nearly 9 million years to see them all.
 
 ---
 
@@ -54,7 +54,7 @@ The **keep** panel shows the palette (click a swatch to copy its hex) and the fo
 | --- | --- |
 | **Palette** | Four sources: 7 hand-made moods, ~1,000 human-made palettes, OKLCH generation around a seeded hue, and [poline](https://github.com/meodai/poline) curves between seeded anchors. Every palette passes a readability guard (text ≥ 4.5:1 WCAG contrast) |
 | **Font** | 107 Google Fonts, including every variable display face. Variable axes are randomised (Fraunces SOFT/WONK, Recursive CASL, Kablammo MORF, Tilt XROT/YROT, …), and a third of universes let one axis slowly "breathe" |
-| **Background** | 119 animated backgrounds, and real 3D scenes come up twice as often as the rest (about 30% of universes): **12 original three.js scenes** written for xʸ (dot sea, ring tunnel, orbit rings, point sphere, synthwave terrain, tumbling cubes, double helix, spiral galaxy, ridge lines, voxel sea, torus knot, crystal cluster), 9 [Vanta](https://www.vantajs.com) effects (dots, rings, fog, cells, clouds, net, globe, …), 41 from [React Bits](https://reactbits.dev), 29 [Paper Shaders](https://shaders.paper.design), 14 [tsParticles](https://particles.js.org) scenes and **14 original GLSL shaders** (marble, topographic lines, truchet tiles, kaleidoscope, moiré, stained glass, aurora, …) |
+| **Background** | 127 animated backgrounds. Real 3D comes up most: **8 composed 3D still lifes** (a hero object — wire globe with needles, glass orb with a lava core, torus, crystal, gyroscope, urchin, knot or cube stack — off to one side, on a seeded floor with companion objects and a slowly orbiting camera; three times as likely), then **12 original three.js scenes** written for xʸ (dot sea, ring tunnel, orbit rings, point sphere, synthwave terrain, tumbling cubes, double helix, spiral galaxy, ridge lines, voxel sea, torus knot, crystal cluster), 9 [Vanta](https://www.vantajs.com) effects (dots, rings, fog, cells, clouds, net, globe, …), 41 from [React Bits](https://reactbits.dev), 29 [Paper Shaders](https://shaders.paper.design), 14 [tsParticles](https://particles.js.org) scenes and **14 original GLSL shaders** (marble, topographic lines, truchet tiles, kaleidoscope, moiré, stained glass, aurora, …) |
 | **Texture** | A layer over the background: dither, paper, halftone, film grain, scanlines, vignette, fibre, frost, droplets, glyph rain, clouds or blaze (or none) |
 | **Button** | 8 shapes × 9 skins, with materials (electric border, glare, specular, border glow, pixel card, glass surface, spotlight), magnetic pull and click sparks |
 | **Button motion** | 16 idle loops (breathe, heartbeat, swing, rubber, 3D tilt, comet, shimmer, ring pulse, hue drift, …), 8 hover responses (grow, lift, tilt, squish, glow, …), 8 entrances (pop, drop, rise, spin, blur, stretch, flip, zoom) and 6 press reactions (pop, shake, jelly, sink, ripple, 3D tilt) — all pure CSS |
@@ -123,7 +123,7 @@ src/
     kit.ts           code generator for the downloadable kit
     ExportPanel.tsx  the "keep" dialog
   genes/shaders/    the 14 original GLSL backgrounds (ours — shipped in export kits)
-  genes/three/      the 12 original three.js scenes (ours — shipped in export kits)
+  genes/three/      the 12 original three.js scenes + the still-life composer (ours — shipped in export kits)
   genes/bg/         tsParticles, Vanta and Paper-image adapters
   genes/behaviour.tsx  button behaviour (drift, orbit, dodge, gravity, …)
   vendor/react-bits/ the React Bits components used, with their licence

@@ -1,4 +1,5 @@
 import type { SceneBuilder } from '../common';
+import { buildStill } from './still';
 import dotField from './dotField';
 import ringTunnel from './ringTunnel';
 import orbitRings from './orbitRings';
@@ -25,5 +26,13 @@ export const SCENES: Record<string, SceneBuilder> = {
   lineStack,
   voxelSea,
   knotPoints,
-  crystalCluster
+  crystalCluster,
+  stillGlobe: ctx => buildStill(ctx, 'globe'),
+  stillOrb: ctx => buildStill(ctx, 'orb'),
+  stillTorus: ctx => buildStill(ctx, 'torus'),
+  stillCrystal: ctx => buildStill(ctx, 'crystal'),
+  stillGyro: ctx => buildStill(ctx, 'gyro'),
+  stillUrchin: ctx => buildStill(ctx, 'urchin'),
+  stillKnot: ctx => buildStill(ctx, 'knot'),
+  stillCubes: ctx => buildStill(ctx, 'cubes')
 };

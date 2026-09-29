@@ -342,8 +342,10 @@ const THREE_D_SOURCES = new Set(['three', 'vanta']);
 
 export const rollBackground = (rng: Rng, p: Palette): BackgroundGene => {
   const eligible = BACKGROUND_IDS.filter(id => DEFS[id].when?.(p) ?? true);
-  // Real 3D scenes (our three.js pack and Vanta) are favourites, so they come up twice as often.
-  const ids = eligible.flatMap(id => (THREE_D_SOURCES.has(DEFS[id].source ?? 'rb') ? [id, id] : [id]));
+  // Real 3D scenes (our three.js pack and Vanta) are favourites, so they come up twice as often,
+  // and the composed 3D still lifes (hero object + floor + companions) three times as often.
+  const weight = (id: string) => (id.startsWith('threeStill') ? 3 : THREE_D_SOURCES.has(DEFS[id].source ?? 'rb') ? 2 : 1);
+  const ids = eligible.flatMap(id => Array<string>(weight(id)).fill(id));
   const id = rng.pick(ids);
   const props = Object.fromEntries(Object.entries(DEFS[id].props(rng, p)).map(([k, v]) => [k, tidy(v)]));
   return { id, props };

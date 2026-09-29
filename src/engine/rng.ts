@@ -34,7 +34,7 @@ export const createRng = (seed: string): Rng => {
   };
 };
 
+// 12 hex characters = 48 bits ≈ 281 trillion reachable universes (8 characters gave ~4.3 billion).
+// Any seed string still works, so older 8-character links keep growing the same universe.
 export const newSeed = (): string =>
-  Math.floor(Math.random() * 0xffffffff)
-    .toString(16)
-    .padStart(8, '0');
+  Array.from(crypto.getRandomValues(new Uint8Array(6)), b => b.toString(16).padStart(2, '0')).join('');

@@ -4,9 +4,9 @@
 
 xʸ is an experimental random-machine website. The page holds a single button (the **x**). Press it and everything around it changes: background, texture, colours, typography, the button itself, how it reacts to a press, its label animation, the words it uses, the cursor, the sound, the layout, what bursts out of it and the transition between states. Even a plain page load never looks the same twice. And every so often you land on a rare one.
 
-The **y** is a seed, an 8-character code that grows a full "genome" of design decisions. The same y always grows the same universe, so every page you land on can be shared, revisited and exported.
+The **y** is a seed, a 12-character code that grows a full "genome" of design decisions. The same y always grows the same universe, so every page you land on can be shared, revisited and exported.
 
-> Well over 10²⁵ discrete combinations, before counting any of the continuous parameters (speeds, sizes, intensities, font axes).
+> **About 10²⁹ combinations**, counting only the listed choices of each layer (14,584 palettes × 3,210 font styles × 64 backgrounds × 80,640 buttons × 1,520 labels × …). Continuous values such as speeds, sizes, generated palettes and font axes aren't counted and push it far higher. A 12-character seed can reach about 281 trillion of them: pressing once a second, you'd need nearly 9 million years to see them all.
 
 ---
 
@@ -16,7 +16,7 @@ The **y** is a seed, an 8-character code that grows a full "genome" of design de
 | --- | --- |
 | **Press the button** (or hit <kbd>Space</kbd>) | A new y, and a new universe, arrives through a random transition |
 | **Move the mouse** | Many backgrounds and most cursors react to it |
-| **Copy the URL** | The seed lives in the hash (`/#3bfd78c8`). Send it to someone and they see exactly your universe |
+| **Copy the URL** | The seed lives in the hash (`/#3bfd78c8a41e`). Send it to someone and they see exactly your universe |
 | **Browser back / forward** | Step through the universes you've already visited |
 | **keep ↓** (top right, or <kbd>e</kbd>) | Open the export panel for the current universe |
 | **sound on / off** (top right, or <kbd>m</kbd>) | Toggle audio. It stays off until your first press, and the setting is remembered |

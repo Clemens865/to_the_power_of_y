@@ -1,7 +1,8 @@
 import { zipSync, strToU8 } from 'fflate';
 import type { Genome } from '../engine/genome';
 import { fontUrl, fontVariationCss } from '../engine/fonts';
-import { backgroundKit } from '../genes/backgrounds';
+import { backgroundKit, isShaderBackground } from '../genes/backgrounds';
+import { shaderKit, type shaderProps } from '../genes/shaders';
 import { buttonCssFor } from '../genes/buttonCss';
 import { buttonKit, labelColor, pressNeedsJs, PRESS_HELPER_SOURCE } from '../genes/button';
 import { labelKit } from '../genes/label';
@@ -10,6 +11,7 @@ import { decorKit, LAYOUT_CSS } from '../genes/layout';
 import { overlayKit } from '../genes/overlay';
 import { RARITY_CSS, RARITY_LABEL } from '../genes/rarity';
 import { BURST_CSS } from '../genes/burst';
+import { behaviourKit } from '../genes/behaviour';
 import soundSource from '../engine/sound.ts?raw';
 import zzfxTypesSource from '../types/zzfx.d.ts?raw';
 import trailsSource from '../genes/trails.tsx?raw';
@@ -28,26 +30,30 @@ const parts = (g: Genome) => {
   const label = labelKit(g.label, g.palette, g.font, color, g.button.size * 16);
   const button = buttonKit(g.button, g.palette, label.jsx);
   const decor = decorKit(g.layout, { seed: g.seed, word: g.label.text, count: 0, palette: g.palette, tagline: g.voice.tagline, hint: g.voice.hint });
-  const background = backgroundKit(g.background);
+  const shader = isShaderBackground(g.background.id) ? shaderKit(g.background.props as ReturnType<typeof shaderProps>) : null;
+  const background = shader ? { importLine: shader.importLine, jsx: shader.jsx, install: [] as string[] } : backgroundKit(g.background);
   const overlay = overlayKit(g.overlay);
   const cursor = cursorEffectInfo(g.cursor);
+  const behaviour = behaviourKit(g.behaviour);
 
   const rb = new Set<string>([...label.components, ...button.components, ...decor.components]);
   if (cursor?.rb) rb.add(cursor.rb);
   const rawImports = [background.importLine, overlay.importLine].filter((l): l is string => !!l);
   const named = new Map<string, Set<string>>();
+  const otherImports: string[] = [];
   for (const line of rawImports) {
     const m = line.match(RB_IMPORT);
     if (m) rb.add(m[1]);
     const n = line.match(NAMED_IMPORT);
     if (n) n[1].split(',').forEach(name => (named.get(n[2]) ?? named.set(n[2], new Set()).get(n[2])!).add(name.trim()));
+    if (!m && !n) otherImports.push(line);
   }
-  const install = new Set<string>(['npm i ogl three gsap motion', ...background.install, ...overlay.install]);
+  const install = new Set<string>(['npm i ogl three gsap motion', ...background.install, ...overlay.install, ...behaviour.install]);
   if (g.sound.voice === 'zzfx') install.add('npm i zzfx');
   const hasConfetti = g.burst.kind !== 'none' && g.burst.kind !== 'shockwave';
   if (hasConfetti) install.add('npm i @tsparticles/confetti');
   for (const c of rb) install.add(`npx shadcn@latest add @react-bits/${c}-TS-CSS`);
-  return { label, button, decor, background, overlay, cursor, rb: [...rb], named, install: [...install], hasConfetti };
+  return { label, button, decor, background, overlay, cursor, behaviour, shader, rb: [...rb], named, otherImports, install: [...install], hasConfetti };
 };
 
 const burstOptions = (g: Genome) => {
@@ -70,10 +76,12 @@ export const universeTsx = (g: Genome): string => {
   const k = parts(g);
   const imports = [
     ...k.rb.map(n => `import ${n} from './components/${n}/${n}';`),
-    ...[...k.named].map(([mod, names]) => `import { ${[...names].join(', ')} } from '${mod}';`)
+    ...[...k.named].map(([mod, names]) => `import { ${[...names].join(', ')} } from '${mod}';`),
+    ...k.otherImports
   ];
   if (k.cursor?.trail) imports.push(`import { Trails } from './trails';`);
   if (k.hasConfetti) imports.push(`import { confetti } from '@tsparticles/confetti';`);
+  if (k.behaviour.source) imports.push(`import { Behaviour } from './Behaviour';`);
 
   const cursorNode = !k.cursor ? '' : k.cursor.trail
     ? `<Trails mode={${js(k.cursor.trail)}} {...${js(g.cursor.props)}} text={${js(g.label.text)}} />`
@@ -147,7 +155,9 @@ export default function Universe({ onPress }: { onPress?: () => void }) {
         ${k.decor.jsx}
       </div>
       <div className="xy-spot${g.rarity !== 'common' ? ' rarity-holo' : ''}" style={{ left: '${g.layout.x}%', top: '${g.layout.y}%' }}>
-        ${k.button.jsx}
+        <div className="entrance enter-${g.button.entrance}">
+        ${k.behaviour.jsx(k.button.jsx)}
+        </div>
       </div>
       ${g.rarity !== 'common' ? `<div className="rarity-badge">{${js(RARITY_LABEL[g.rarity])}}</div>` : ''}
       ${cursorNode}
@@ -175,11 +185,12 @@ export const universeCss = (g: Genome): string => {
 }
 .xy-bg { position: absolute; inset: 0; }
 .xy-bg > * { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; }
-.xy-spot { position: absolute; transform: translate(-50%, -50%); z-index: 2; }
+.xy-spot { position: absolute; transform: translate(-50%, -50%); z-index: 2; perspective: 40em; }
+.entrance { display: inline-block; }
 .cursor-layer { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
 .cursor-layer > * { width: 100%; height: 100%; }
 ${fontVariationCss(f, '.xbtn-label')}
-${buttonCssFor(g.button.shape, g.button.skin, g.button.idle, g.button.press)}
+${buttonCssFor(g.button.shape, g.button.skin, g.button.idle, g.button.press, g.button.hover, g.button.entrance)}
 ${g.layout.kind === 'bare' ? '' : LAYOUT_CSS}
 ${k.overlay.css}
 ${g.rarity !== 'common' ? RARITY_CSS : ''}
@@ -234,6 +245,10 @@ export const buildKit = (g: Genome, link: string) => {
     'recipe.json': JSON.stringify(g, null, 2)
   };
   if (cursorEffectInfo(g.cursor)?.trail) files['trails.tsx'] = trailsSource;
+  const shaderFiles = parts(g).shader?.files ?? {};
+  Object.assign(files, shaderFiles);
+  const behaviourSource = behaviourKit(g.behaviour).source;
+  if (behaviourSource) files['Behaviour.tsx'] = behaviourSource;
   return files;
 };
 

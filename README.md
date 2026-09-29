@@ -6,7 +6,7 @@ xʸ is an experimental random-machine website. The page holds a single button (t
 
 The **y** is a seed, a 12-character code that grows a full "genome" of design decisions. The same y always grows the same universe, so every page you land on can be shared, revisited and exported.
 
-> **About 10²⁹ combinations**, counting only the listed choices of each layer (14,584 palettes × 3,210 font styles × 64 backgrounds × 80,640 buttons × 1,520 labels × …). Continuous values such as speeds, sizes, generated palettes and font axes aren't counted and push it far higher. A 12-character seed can reach about 281 trillion of them: pressing once a second, you'd need nearly 9 million years to see them all.
+> **About 10³³ combinations**, counting only the listed choices of each layer (14,584 palettes × 3,210 font styles × 107 backgrounds × 13 textures × 83 million button looks × 6 behaviours × 1,520 labels × …). Continuous values such as speeds, sizes, generated palettes and font axes aren't counted and push it far higher. A 12-character seed can reach about 281 trillion of them: pressing once a second, you'd need nearly 9 million years to see them all.
 
 ---
 
@@ -54,14 +54,15 @@ The **keep** panel shows the palette (click a swatch to copy its hex) and the fo
 | --- | --- |
 | **Palette** | Four sources: 7 hand-made moods, ~1,000 human-made palettes, OKLCH generation around a seeded hue, and [poline](https://github.com/meodai/poline) curves between seeded anchors. Every palette passes a readability guard (text ≥ 4.5:1 WCAG contrast) |
 | **Font** | 107 Google Fonts, including every variable display face. Variable axes are randomised (Fraunces SOFT/WONK, Recursive CASL, Kablammo MORF, Tilt XROT/YROT, …), and a third of universes let one axis slowly "breathe" |
-| **Background** | 64 animated backgrounds: 41 from [React Bits](https://reactbits.dev) (Aurora, Galaxy, Liquid Chrome, Light Tunnel, Radar, Ferrofluid, Evil Eye, …) and 23 [Paper Shaders](https://shaders.paper.design) (mesh gradients, god rays, metaballs, voronoi, liquid metal, …) |
-| **Texture** | A layer over the background: dither, paper, halftone, film grain, scanlines, vignette or fibre (or none) |
-| **Button** | 8 shapes × 9 skins × idle motions, with materials (electric border, glare, specular, border glow, pixel card, glass surface, spotlight), magnetic pull and click sparks |
-| **Press** | How the button reacts: pop, shake, jelly, sink, ripple or 3D tilt with glare |
+| **Background** | 107 animated backgrounds: 41 from [React Bits](https://reactbits.dev) (Aurora, Galaxy, Liquid Chrome, Light Tunnel, Radar, Ferrofluid, …), 29 [Paper Shaders](https://shaders.paper.design) (mesh gradients, god rays, metaballs, liquid metal, halftone, fluted glass, …), 14 [tsParticles](https://particles.js.org) scenes (links, hyperspace, matrix, meteors, fire, …), 9 [Vanta](https://www.vantajs.com) effects (fog, cells, clouds, net, globe, …) and **14 original shaders** written for xʸ (marble, topographic lines, truchet tiles, kaleidoscope, moiré, hex pulse, stained glass, aurora, op-art rings, …) |
+| **Texture** | A layer over the background: dither, paper, halftone, film grain, scanlines, vignette, fibre, frost, droplets, glyph rain, clouds or blaze (or none) |
+| **Button** | 8 shapes × 9 skins, with materials (electric border, glare, specular, border glow, pixel card, glass surface, spotlight), magnetic pull and click sparks |
+| **Button motion** | 16 idle loops (breathe, heartbeat, swing, rubber, 3D tilt, comet, shimmer, ring pulse, hue drift, …), 8 hover responses (grow, lift, tilt, squish, glow, …), 8 entrances (pop, drop, rise, spin, blur, stretch, flip, zoom) and 6 press reactions (pop, shake, jelly, sink, ripple, 3D tilt) — all pure CSS |
+| **Behaviour** | Where the button goes: still, drift, orbit, bob, dodge (slips away from the pointer up to three times, then lets you press it) or gravity (drops in and bounces, with real physics) |
 | **Label** | 20 text treatments (shiny, gradient, decrypt, fuzzy, typewriter, rotating, blur, split-flap, scramble, 3D depth, echo, stroke, warp, particles, pressure, tech, fold, focus, split) |
 | **Voice** | The tone of the words: classic, deadpan, poetic, shouty, bureaucratic, cosmic, tender or machine — for the label and the text around it |
-| **Cursor** | 8 palette-coloured CSS cursors, plus 20 cursor effects: 10 from React Bits (blob, splash, target, swarm, ghost, glow, ribbons, grid, …) and 10 custom canvas trails (comet, confetti, ink, snake, ripples, letters, pixels, spotlight, elastic, lens) |
-| **Layout** | 13 kinds: frame, poster, marquee, swiss grid, split, orbit, magnet lines, 3D cubes, laser, magic rings, curved and looping text rings, or bare; plus where the button sits |
+| **Cursor** | 8 palette-coloured CSS cursors, plus 22 cursor effects: 10 from React Bits (blob, splash, target, swarm, ghost, glow, ribbons, grid, …), 10 custom canvas trails (comet, confetti, ink, snake, ripples, letters, pixels, spotlight, elastic, lens), Canvas UI bubbles and tsParticles fireflies |
+| **Layout** | 12 kinds: frame, poster, marquee, swiss grid, split, orbit, magnet lines, 3D cubes, laser, magic rings, looping text ring, or bare; plus where the button sits |
 | **Burst** | What flies out on press: confetti, stars, hearts, card suits, fireworks, snow, emoji or a shockwave |
 | **Sound** | 7 synthesised press voices or a seeded [ZzFX](https://github.com/KilledByAPixel/ZzFX) sound (coin, laser, jump, power-up, hit, bubble, robot, crunch), a hover tick, and sometimes an ambient bed, keyed to the palette hue. No audio files |
 | **Transition** | 12 named View Transitions plus 5 generated ones (polygon iris, conic sweep, soft wipe, stripes, checkerboard) whose shape, angle, count, timing and easing come from the seed |
@@ -89,6 +90,8 @@ npm run preview    # serve the production build
 Transitions use the [View Transitions API](https://developer.mozilla.org/docs/Web/API/View_Transitions_API) (Chromium, Safari 18+). Other browsers still get new universes, just without the animated change-over. With *prefers-reduced-motion* turned on, transitions, bursts and idle animations are switched off.
 
 **Guardrails.** A universe never runs more than two WebGL layers at once (extras are swapped for 2D versions), every layer sits in an error boundary so one broken effect can't blank the page, and WebGL contexts are released when a universe is replaced.
+
+**Lightweight by design.** The first load is ~146 KB gzipped (mostly React); every background, texture, cursor, label effect, button material, decoration, the colour-name list and the export panel is its own chunk, loaded only when a universe uses it. Shaders render below full resolution with capped pixel density. Measured in a headless Chromium: median 120 fps across random universes (slowest seen: ~84), and the JS heap levels off at ~17 MB after 80 presses.
 
 ---
 
@@ -119,7 +122,11 @@ src/
   export/
     kit.ts           code generator for the downloadable kit
     ExportPanel.tsx  the "keep" dialog
+  genes/shaders/    the 14 original GLSL backgrounds (ours — shipped in export kits)
+  genes/bg/         tsParticles, Vanta and Paper-image adapters
+  genes/behaviour.tsx  button behaviour (drift, orbit, dodge, gravity, …)
   vendor/react-bits/ the React Bits components used, with their licence
+  vendor/canvas-ui/  the Canvas UI effects used, with their licence
 ```
 
 Each press writes a new seed into the URL hash. A `hashchange` listener grows the genome, preloads its font, then swaps the universe inside `document.startViewTransition`.
@@ -138,9 +145,11 @@ Adding a new background is a single entry in `src/genes/backgrounds.tsx`.
 
 - Backgrounds, text effects, cursor effects and button wrappers are from **[React Bits](https://reactbits.dev)** by David Haz, licensed MIT + Commons Clause (see [`src/vendor/react-bits/LICENSE.md`](src/vendor/react-bits/LICENSE.md)). You may use them in your own sites and apps, but not resell the components themselves. Export kits therefore reference the official React Bits registry rather than bundling their source.
 - [Paper Shaders](https://github.com/paper-design/shaders) (Apache-2.0).
+- [Canvas UI](https://github.com/DavidHDev/canvas-ui) effects (frost, droplets, glyph rain, clouds, blaze, bubbles), MIT + Commons Clause like React Bits — used on the site, not shipped in export kits.
+- [Vanta](https://github.com/tengbao/vanta), [tsParticles](https://github.com/tsparticles/tsparticles) and [matter-js](https://github.com/liabru/matter-js) (all MIT). Vanta runs on today's three.js with a small compatibility shim (`src/genes/bg/VantaBg.tsx`).
 - Human-made palettes from [nice-color-palettes](https://github.com/Jam3/nice-color-palettes), sourced from COLOURlovers, **CC BY-NC-SA 3.0**. This is why the project is non-commercial.
 - [poline](https://github.com/meodai/poline), [culori](https://github.com/Evercoder/culori), [color-name-list](https://github.com/meodai/color-names), [ZzFX](https://github.com/KilledByAPixel/ZzFX) and [tsParticles confetti](https://github.com/tsparticles/tsparticles) (all MIT).
 - Fonts are served by [Google Fonts](https://fonts.google.com) under their respective open licences; the list was taken from the [Fontsource](https://fontsource.org) API.
 - Built with React, Vite, TypeScript, [OGL](https://github.com/oframe/ogl), [three.js](https://threejs.org), [GSAP](https://gsap.com), [Motion](https://motion.dev) and [fflate](https://github.com/101arrowz/fflate).
 
-A few vendored components carry small, marked patches (search for `xʸ patch`): FloatingLines (resize after unmount), SplitText (mount trigger instead of `@gsap/react`), Waves (invalid CSS).
+A few vendored components carry small, marked patches (search for `xʸ patch`): FloatingLines (resize after unmount), SplitText (mount trigger instead of `@gsap/react`), Waves (invalid CSS), and the Canvas UI effects (pixel-density cap, pause when hidden).

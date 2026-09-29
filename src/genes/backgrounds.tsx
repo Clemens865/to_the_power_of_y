@@ -1,6 +1,9 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import type { Rng } from '../engine/rng';
 import { hexToRgb01, type Palette } from '../engine/palette';
+import { SHADER_IDS, shaderProps } from './shaders/props';
+import { TSP_PRESETS, TSP_PACKAGE, TSP_LOADER, tsParticlesOptions, type TspPreset } from './bg/tsparticlesOptions';
+import { VANTA_EFFECTS, vantaOptions } from './bg/vantaOptions';
 
 // Each background is an effect component plus a mapping from (rng, palette) to its props.
 // Sources: React Bits (vendored under src/vendor/react-bits) and Paper Shaders (@paper-design/shaders-react).
@@ -10,8 +13,9 @@ interface BackgroundDef {
   props: (rng: Rng, p: Palette) => Props;
   /** Component name for the export kit (defaults to the capitalised id). */
   name?: string;
-  /** 'rb' = React Bits (default), 'paper' = @paper-design/shaders-react. */
-  source?: 'rb' | 'paper';
+  /** 'rb' = React Bits (default), 'paper' = @paper-design/shaders-react, 'paperImage' = Paper image filters on a
+   *  generated picture, 'tsp' = tsParticles preset, 'vanta' = Vanta.js effect. */
+  source?: 'rb' | 'paper' | 'paperImage' | 'tsp' | 'vanta' | 'shader';
   /** false for canvas-2D / DOM renderers. Defaults to true (except the legacy 2D ids below). */
   webgl?: boolean;
   /** Only eligible for palettes that pass this test. */
@@ -247,7 +251,61 @@ const PAPER_ADDED: Record<string, BackgroundDef> = {
   paperLiquidMetal: paper('LiquidMetal', (r, p) => ({ colorBack: p.bg, colorTint: p.accent, distortion: r.range(0.05, 0.12), repetition: r.range(1.5, 3), shiftRed: r.range(0.1, 0.4), shiftBlue: r.range(0.1, 0.4), contour: r.range(0.2, 0.6), softness: r.range(0.05, 0.3), angle: r.int(0, 180), shape: r.pick(SHAPES), scale: r.range(0.5, 0.8), speed: r.range(0.5, 1) }))
 };
 
-const DEFS: Record<string, BackgroundDef> = { ...LEGACY, ...RB_ADDED, ...PAPER_ADDED };
+// v0.4 additions — tsParticles presets (canvas 2D, MIT). Engine + each preset load lazily as their own chunks.
+const TsParticlesBg = lazy(() => import('./bg/TsParticlesBg'));
+const tspId = (preset: string) => 'tsp' + preset.charAt(0).toUpperCase() + preset.slice(1);
+const TSP_ADDED: Record<string, BackgroundDef> = Object.fromEntries(
+  TSP_PRESETS.map(preset => [
+    tspId(preset),
+    { source: 'tsp', webgl: false, Component: TsParticlesBg, props: (r: Rng, p: Palette) => ({ preset, options: tsParticlesOptions(preset, r, p) }) } satisfies BackgroundDef
+  ])
+);
+
+// v0.4 additions — Vanta.js (WebGL via our three r186, MIT). Screenshot-checked on r186 with the patches in bg/VantaBg.tsx.
+// Not included: birds (GPGPU flocking, too heavy), halo (blows out to off-palette white/yellow on r186),
+// topology/trunk (need p5), clouds2 (needs a texture file). Details in bg/vantaOptions.ts.
+const VantaBg = lazy(() => import('./bg/VantaBg'));
+const VANTA_ADDED: Record<string, BackgroundDef> = Object.fromEntries(
+  VANTA_EFFECTS.map(effect => [
+    'vanta' + effect.charAt(0).toUpperCase() + effect.slice(1),
+    { source: 'vanta', Component: VantaBg, props: (r: Rng, p: Palette) => ({ effect, options: vantaOptions(effect, r, p) }) } satisfies BackgroundDef
+  ])
+);
+
+// v0.4 additions — Paper image filters. The picture is painted per universe from { imageSeed, imageStyle, imageColors }.
+const PaperImageBg = lazy(() => import('./bg/PaperImageBg'));
+const IMAGE_STYLES = ['blobs', 'glyph', 'orbits', 'bands'] as const;
+const paperImage = (shader: string, image: (r: Rng, p: Palette) => Props, props: BackgroundDef['props'], when?: BackgroundDef['when']): BackgroundDef => ({
+  name: shader,
+  source: 'paperImage',
+  when,
+  Component: PaperImageBg,
+  props: (r, p) => ({ shader, imageSeed: r.int(0, 999999), ...image(r, p), ...props(r, p) })
+});
+const colourImage = (r: Rng, p: Palette) => ({ imageStyle: r.pick(IMAGE_STYLES), imageColors: [p.accent, p.accent2, p.accent3, p.fg], imageBack: p.bg });
+
+const PAPER_IMAGE_ADDED: Record<string, BackgroundDef> = {
+  paperHalftoneDots: paperImage('HalftoneDots', colourImage, (r, p) => ({ fit: 'cover', colorBack: p.bg, colorFront: r.chance(0.5) ? p.accent : p.fg, originalColors: r.chance(0.35), type: r.pick(['classic', 'gooey', 'holes', 'soft']), grid: r.pick(['hex', 'square']), size: r.range(0.3, 0.7), radius: r.range(1, 1.5), contrast: r.range(0.3, 0.7), grainMixer: r.range(0, 0.2), grainOverlay: r.range(0, 0.12), grainSize: 0.5 })),
+  // CMYK inks are subtractive: they only read on light paper.
+  paperHalftoneCmyk: paperImage('HalftoneCmyk', colourImage, (r, p) => ({ fit: 'cover', colorBack: p.bg, colorC: p.accent, colorM: p.accent2, colorY: p.accent3, colorK: p.fg, size: r.range(0.12, 0.3), type: r.pick(['dots', 'ink', 'sharp']), contrast: r.range(0.8, 1.2), softness: r.range(0.5, 1), gridNoise: r.range(0.1, 0.3), floodC: r.range(0, 0.15), gainC: r.range(0, 0.3), gainY: r.range(0, 0.2), grainSize: 0.5 }), p => p.isLight),
+  paperImageDithering: paperImage('ImageDithering', colourImage, (r, p) => ({ fit: 'cover', colorBack: p.bg, colorFront: p.accent, colorHighlight: p.accent2, type: r.pick(['random', '2x2', '4x4', '8x8']), size: r.int(2, 4), colorSteps: r.int(2, 4), originalColors: r.chance(0.25) })),
+  paperFlutedGlass: paperImage('FlutedGlass', colourImage, (r, p) => ({ fit: 'cover', colorBack: '#00000000', colorShadow: mix(p.bg, '#000000', 0.6), colorHighlight: '#ffffff', shape: r.pick(['lines', 'linesIrregular', 'wave', 'zigzag', 'pattern']), distortionShape: r.pick(['prism', 'lens', 'contour', 'cascade', 'flat']), size: r.range(0.3, 0.8), angle: r.int(0, 180), distortion: r.range(0.3, 0.8), highlights: r.range(0.05, 0.2), shadows: r.range(0.1, 0.35), blur: r.range(0, 0.15), edges: r.range(0.1, 0.4), shift: r.range(-0.3, 0.3) })),
+  // Heatmap flattens the picture onto white and reads dark pixels as the shape: a black glyph/orbit on transparent. Animated (the others are still).
+  paperHeatmap: paperImage('Heatmap', (r, p) => ({ imageStyle: r.pick(['glyph', 'glyph', 'orbits']), imageColors: ['#000000'], imageBack: null }), (r, p) => ({ colorBack: p.bg, colors: [mix(p.bg, p.accent, 0.35), p.accent, p.accent2, p.accent3, mix(p.accent3, p.fg, 0.5)], contour: r.range(0.3, 0.7), angle: r.int(0, 360), noise: r.range(0, 0.4), innerGlow: r.range(0.3, 0.7), outerGlow: r.range(0.3, 0.7), scale: r.range(0.6, 0.8), speed: r.range(0.5, 1.1) })),
+  paperLensDistortion: paperImage('LensDistortion', colourImage, (r, _p) => ({ fit: 'cover', spread: r.range(0.3, 0.8), bias: r.range(-0.5, 1), angle: r.int(0, 360), perspective: r.range(0, 0.6), count: r.int(12, 30), dispersion: r.range(0.4, 1), dispersionColor: r.range(0, 1), focusCenter: r.range(0.3, 0.9), focusEdges: r.range(0.3, 1), swirl: r.range(-0.5, 0.5), lensBulge: r.range(-0.2, 0.4), grainOverlay: r.range(0, 0.1) }))
+};
+
+// v0.4 additions — the xʸ original shader pack (our own GLSL, so it ships in export kits too).
+// props.ts holds only ids + parameter ranges; the GLSL loads with the lazily imported component.
+const ShaderBg = lazy(() => import('./shaders/ShaderBackground'));
+const SHADER_ADDED: Record<string, BackgroundDef> = Object.fromEntries(
+  SHADER_IDS.map(id => [
+    'shader' + id.charAt(0).toUpperCase() + id.slice(1),
+    { source: 'shader', Component: ShaderBg, props: (r: Rng, p: Palette) => shaderProps(id, r, p) } satisfies BackgroundDef
+  ])
+);
+
+const DEFS: Record<string, BackgroundDef> = { ...LEGACY, ...RB_ADDED, ...PAPER_ADDED, ...TSP_ADDED, ...VANTA_ADDED, ...PAPER_IMAGE_ADDED, ...SHADER_ADDED };
 
 // Canvas-2D / DOM renderers among the v0.1 pool.
 const LEGACY_2D = new Set(['waves', 'dotGrid', 'letterGlitch']);
@@ -281,6 +339,8 @@ const isPaper = (id: string) => DEFS[id]?.source === 'paper';
 // Component name for each background (used by the export kit).
 export const backgroundComponentName = (id: string) => DEFS[id]?.name ?? id.charAt(0).toUpperCase() + id.slice(1);
 
+export const isShaderBackground = (id: string) => DEFS[id]?.source === 'shader';
+
 export const backgroundUsesWebGL = (id: string): boolean => {
   const def = DEFS[id];
   if (!def) return false;
@@ -289,10 +349,43 @@ export const backgroundUsesWebGL = (id: string): boolean => {
 };
 
 const FILL = { width: '100%', height: '100%' };
+const PAPER_PIXELS = () => ({ minPixelRatio: 1, maxPixelCount: Math.round(Math.min(1920 * 1080, innerWidth * innerHeight * 2.25)) });
 
-export const backgroundKit = (gene: BackgroundGene): { importLine: string; jsx: string; install: string[] } => {
+// tsParticles exports as a self-contained mount: a fresh Engine (the global one refuses new presets once
+// anything — e.g. confetti — has loaded) created lazily from a ref callback, so no hook or extra import is needed.
+const tspKit = (gene: BackgroundGene) => {
+  const preset = gene.props.preset as TspPreset;
+  const pkg = `@tsparticles/preset-${TSP_PACKAGE[preset]}`;
+  const options = { preset, fpsLimit: 60, background: { color: { value: 'transparent' }, image: '' }, ...(gene.props.options as Props), fullScreen: { enable: false } };
+  const jsx = `<div style={{ position: 'absolute', inset: 0 }} ref={el => {
+          if (!el || el.dataset.particles) return;
+          el.dataset.particles = 'on';
+          void (async () => {
+            const { tsParticles } = await import('@tsparticles/engine');
+            const { ${TSP_LOADER[preset]} } = await import('${pkg}');
+            const engine = new (tsParticles.constructor as new () => typeof tsParticles)();
+            await ${TSP_LOADER[preset]}(engine);
+            await engine.load({ element: el, options: ${JSON.stringify(options)} });
+          })();
+        }} />`;
+  return { importLine: null, jsx, install: [`npm i @tsparticles/engine ${pkg}`] };
+};
+
+const notExportable = (gene: BackgroundGene, what: string, deps: string) => ({
+  importLine: null,
+  jsx: `{/* ${gene.id}: not exportable yet — see README */}`,
+  install: [`# ${gene.id} (${what}) is not in this kit yet; recipe.json holds its settings. To rebuild it by hand: ${deps}`]
+});
+
+export const backgroundKit = (gene: BackgroundGene): { importLine: string | null; jsx: string; install: string[] } => {
   const name = backgroundComponentName(gene.id);
   const props = JSON.stringify(gene.props);
+  const source = DEFS[gene.id]?.source;
+  if (source === 'tsp') return tspKit(gene);
+  // The shader pack's kit output (with its GLSL) is produced by kit.ts via ./shaders, which only the lazy kit imports.
+  if (source === 'shader') return { importLine: null, jsx: '', install: [] };
+  if (source === 'vanta') return notExportable(gene, `Vanta.js ${String(gene.props.effect)}`, 'npm i vanta three');
+  if (source === 'paperImage') return notExportable(gene, `Paper ${name} over a generated picture`, 'npm i @paper-design/shaders-react');
   if (isPaper(gene.id)) {
     return {
       importLine: `import { ${name} } from '@paper-design/shaders-react';`,
@@ -309,5 +402,7 @@ export const backgroundKit = (gene: BackgroundGene): { importLine: string; jsx: 
 
 export const Background = ({ gene }: { gene: BackgroundGene }) => {
   const { Component } = DEFS[gene.id];
-  return isPaper(gene.id) ? <Component {...gene.props} style={FILL} /> : <Component {...gene.props} />;
+  // tsParticles / Vanta / Paper-image components size themselves to the stretched .bg child.
+  // Paper's default renders at ≥2× and up to 8 Mpx; cap it like the image-based Paper shaders.
+  return isPaper(gene.id) ? <Component {...gene.props} style={FILL} {...PAPER_PIXELS()} /> : <Component {...gene.props} />;
 };

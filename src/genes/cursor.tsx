@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, type ComponentType, type LazyExoticComponent } from 'react';
-import type { Rng } from '../engine/rng';
-import type { Palette } from '../engine/palette';
+import { createRng, type Rng } from '../engine/rng';
+import { hexToRgb01, type Palette } from '../engine/palette';
 import { Trails, type TrailMode } from './trails';
 
 // Two families: plain CSS cursors (an SVG drawn in the palette) and React Bits cursor effects.
@@ -8,9 +8,12 @@ const CSS_KINDS = ['system', 'crosshair', 'dot', 'ring', 'arrow', 'star', 'y', '
 const LIBRARY_KINDS = ['blob', 'splash', 'target', 'glow', 'crosshairLines', 'ribbons', 'swarm', 'ghost', 'grid', 'textTrail'] as const;
 const TRAIL_KINDS: TrailMode[] = ['comet', 'confetti', 'ink', 'snake', 'ripples', 'letters', 'pixels', 'spotlight', 'elastic', 'lens'];
 const EFFECT_KINDS = [...LIBRARY_KINDS, ...TRAIL_KINDS];
+// Site-only extras (not exportable): Canvas UI Bubble (MIT + Commons Clause) and tsParticles' firefly preset.
+const EXTRA_KINDS = ['bubble', 'firefly'] as const;
 type CssKind = (typeof CSS_KINDS)[number];
 type LibraryKind = (typeof LIBRARY_KINDS)[number];
-type EffectKind = LibraryKind | TrailMode;
+type ExtraKind = (typeof EXTRA_KINDS)[number];
+type EffectKind = LibraryKind | TrailMode | ExtraKind;
 
 export interface CursorGene {
   css: CssKind;
@@ -104,8 +107,9 @@ const EFFECTS: Record<LibraryKind, { Component: LazyExoticComponent<ComponentTyp
 };
 
 const isTrail = (k: EffectKind): k is TrailMode => (TRAIL_KINDS as string[]).includes(k);
+const isExtra = (k: EffectKind): k is ExtraKind => (EXTRA_KINDS as readonly string[]).includes(k);
 
-const WEBGL_CURSORS = new Set<EffectKind>(['splash', 'glow', 'ribbons', 'swarm', 'ghost']);
+const WEBGL_CURSORS = new Set<EffectKind>(['splash', 'glow', 'ribbons', 'swarm', 'ghost', 'bubble']);
 export const cursorUsesWebGL = (gene: CursorGene) => gene.effect !== 'none' && WEBGL_CURSORS.has(gene.effect);
 
 // Swap a WebGL cursor effect for a cheap 2D one (used by the GPU budget in grow()).
@@ -118,16 +122,30 @@ const trailProps = (r: Rng, p: Palette) => ({ colors: [p.accent, p.accent2, p.ac
 
 const round = (n: number) => Math.round(n * 1000) / 1000;
 
+const rgb = (hex: string) => hexToRgb01(hex).map(round) as [number, number, number];
+const EXTRA_PROPS: Record<ExtraKind, (r: Rng, p: Palette) => Record<string, unknown>> = {
+  bubble: (r, p) => ({ size: r.int(18, 40), trail: r.int(8, 16), follow: round(r.range(0.3, 0.8)), blend: r.int(10, 18), iridescence: round(r.range(0.6, 1.3)), shine: round(r.range(0.2, 0.5)), rim: round(r.range(0.4, 0.9)), colorA: rgb(p.accent), colorB: rgb(p.accent2), tint: rgb(p.fg), tintStrength: round(r.range(0.2, 0.6)), resolution: 0.75 }),
+  firefly: (r, p) => ({ colors: [p.accent, p.accent2, p.accent3], quantity: r.int(2, 5), size: r.int(2, 5), speed: round(r.range(1.5, 4)), life: round(r.range(2, 5)) })
+};
+
 export const rollCursor = (rng: Rng, p: Palette): CursorGene => {
   const css = rng.pick(CSS_KINDS);
-  const effect = rng.chance(0.6) ? rng.pick(EFFECT_KINDS) : 'none';
+  // Same draws as rng.chance(0.6) + pick, so the main stream (and every gene after the cursor) is unchanged.
+  // The site-only extras take the top of the old 'none' range and roll their props on a stream of their own.
+  const roll = rng.next();
+  if (roll >= 0.88) {
+    const effect = EXTRA_KINDS[Math.min(EXTRA_KINDS.length - 1, Math.floor(((roll - 0.88) / 0.12) * EXTRA_KINDS.length))];
+    return { css, effect, props: EXTRA_PROPS[effect](createRng(`cursor-extra:${roll}`), p) };
+  }
+  const effect = roll < 0.6 ? rng.pick(EFFECT_KINDS) : 'none';
   const props = effect === 'none' ? {} : isTrail(effect) ? trailProps(rng, p) : EFFECTS[effect].props(rng, p);
   return { css, effect, props };
 };
 
 // For the export kit: React Bits component name, or 'Trails' for the home-made ones.
-export const cursorEffectInfo = (gene: CursorGene) => {
-  if (gene.effect === 'none') return null;
+// Site-only extras return null, so the kit simply ships the universe without its cursor effect.
+export const cursorEffectInfo = (gene: CursorGene): { rb: string | null; trail: TrailMode | null; hidesCursor: boolean } | null => {
+  if (gene.effect === 'none' || isExtra(gene.effect)) return null;
   if (isTrail(gene.effect)) return { rb: null, trail: gene.effect, hidesCursor: false };
   return { rb: EFFECTS[gene.effect].rb, trail: null, hidesCursor: !!EFFECTS[gene.effect].hidesCursor };
 };
@@ -153,6 +171,8 @@ export const CursorLayer = ({ gene, text }: { gene: CursorGene; text: string }) 
   }, []);
   if (gene.effect === 'none') return null;
   if (isTrail(gene.effect)) return <Trails mode={gene.effect} {...(gene.props as { colors: string[]; size: number; dark: string })} text={text} />;
+  if (gene.effect === 'bubble') return <BubbleCursor props={gene.props} />;
+  if (gene.effect === 'firefly') return <FireflyCursor props={gene.props} />;
   const { Component } = EFFECTS[gene.effect];
   return (
     <div ref={ref} className="cursor-layer" aria-hidden>
@@ -161,4 +181,75 @@ export const CursorLayer = ({ gene, text }: { gene: CursorGene; text: string }) 
       </Suspense>
     </div>
   );
+};
+
+// ---- site-only extras: own lazy chunks, cleaned up on unmount --------------------------------
+
+const BubbleCursor = ({ props }: { props: Record<string, unknown> }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const host = ref.current;
+    if (!host) return;
+    let cleanup: (() => void) | null = null;
+    let gone = false;
+    void import('../vendor/canvas-ui/mount').then(({ mountCanvasUi }) => {
+      if (!gone) cleanup = mountCanvasUi(host, 'bubble', props);
+    });
+    return () => {
+      gone = true;
+      cleanup?.();
+    };
+  }, [props]);
+  return <div ref={ref} className="cursor-layer" aria-hidden />;
+};
+
+type FireflyEngine = (typeof import('@tsparticles/engine'))['tsParticles'];
+let fireflyEngine: Promise<FireflyEngine> | null = null;
+const loadFirefly = () =>
+  (fireflyEngine ??= Promise.all([import('@tsparticles/engine'), import('@tsparticles/preset-firefly')]).then(async ([{ tsParticles }, { loadFireflyPreset }]) => {
+    // Own Engine instance: the global one refuses new plugins once anything (e.g. the confetti burst) has loaded.
+    const engine = new (tsParticles.constructor as new () => FireflyEngine)();
+    await loadFireflyPreset(engine);
+    return engine;
+  }));
+
+const FireflyCursor = ({ props }: { props: Record<string, unknown> }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  useEffect(() => {
+    const host = ref.current;
+    if (!host || reduced) return;
+    const f = props as { colors: string[]; quantity: number; size: number; speed: number; life: number };
+    let gone = false;
+    let container: { destroy: (remove?: boolean) => void } | undefined;
+    const options = {
+      preset: 'firefly',
+      fullScreen: { enable: false },
+      background: { color: '#000', opacity: 0 },
+      detectRetina: false,
+      fpsLimit: 60,
+      pauseOnBlur: true,
+      pauseOnOutsideViewport: true,
+      particles: {
+        paint: { fill: { enable: true, color: { value: f.colors } } },
+        size: { value: { min: Math.max(1, f.size - 2), max: f.size + 1 } },
+        move: { enable: true, speed: f.speed, size: true },
+        life: { duration: { value: f.life, sync: false }, count: 1 }
+      },
+      // The layer is pointer-events:none, so listen on the window instead of the canvas.
+      interactivity: { detectsOn: 'window', modes: { trail: { delay: 0.5, pauseOnStop: true, quantity: f.quantity } } }
+    };
+    loadFirefly()
+      .then(engine => (gone ? undefined : engine.load({ element: host, options: options as never })))
+      .then(c => {
+        if (gone) c?.destroy();
+        else container = c;
+      })
+      .catch(err => console.warn('[xʸ] firefly cursor failed to load:', err));
+    return () => {
+      gone = true;
+      container?.destroy();
+    };
+  }, [props, reduced]);
+  return <div ref={ref} className="cursor-layer" aria-hidden />;
 };

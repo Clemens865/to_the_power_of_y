@@ -1,19 +1,19 @@
 import { lazy, Suspense, type CSSProperties, type ComponentType } from 'react';
 import type { Rng } from '../engine/rng';
 import type { Palette } from '../engine/palette';
-import CircularText from '../vendor/react-bits/CircularText/CircularText';
-import MagnetLines from '../vendor/react-bits/MagnetLines/MagnetLines';
-import Cubes from '../vendor/react-bits/Cubes/Cubes';
-import CurvedLoop from '../vendor/react-bits/CurvedLoop/CurvedLoop';
-import TextLoop from '../vendor/react-bits/TextLoop/TextLoop';
-
-// three.js decorations load on demand.
+// Every decoration loads on demand, so layouts cost nothing until a universe uses them.
+const CircularText = lazy(() => import('../vendor/react-bits/CircularText/CircularText'));
+const MagnetLines = lazy(() => import('../vendor/react-bits/MagnetLines/MagnetLines'));
+const Cubes = lazy(() => import('../vendor/react-bits/Cubes/Cubes'));
+const TextLoop = lazy(() => import('../vendor/react-bits/TextLoop/TextLoop'));
 const LaserFlow = lazy(() => import('../vendor/react-bits/LaserFlow/LaserFlow'));
 const MagicRings = lazy(() => import('../vendor/react-bits/MagicRings/MagicRings'));
 
 // Layouts decorate the page around the button and decide where the button sits.
 // Order is part of the seed contract: append, don't reorder.
-const KINDS = ['bare', 'bare', 'frame', 'poster', 'marquee', 'swiss', 'split', 'orbit', 'magnet', 'cubes', 'laser', 'rings', 'curved', 'textloop'] as const;
+// 'curved' (React Bits CurvedLoop) was dropped in v0.4: it re-lays out two large SVG text paths every frame
+// and could pull a whole universe down to ~11 fps.
+const KINDS = ['bare', 'bare', 'frame', 'poster', 'marquee', 'swiss', 'split', 'orbit', 'magnet', 'cubes', 'laser', 'rings', 'textloop'] as const;
 type Kind = (typeof KINDS)[number];
 
 // Candidate button positions in % of the viewport; centre is weighted up.
@@ -37,7 +37,6 @@ export const rollLayout = (rng: Rng): LayoutGene => {
   if (kind === 'split') return { kind, x: vertical ? split : 50, y: vertical ? 50 : split, split, vertical, marqueeSpeed };
   if (kind === 'orbit' || kind === 'poster' || kind === 'cubes') return { kind, x: 50, y: 50, split, vertical, marqueeSpeed };
   if (kind === 'swiss') return { kind, x: rng.pick([33, 67]), y: rng.pick([33, 67]), split, vertical, marqueeSpeed };
-  if (kind === 'curved') return { kind, x: 50, y: sy, split, vertical, marqueeSpeed };
   return { kind, x: sx, y: sy, split, vertical, marqueeSpeed };
 };
 
@@ -54,7 +53,7 @@ export interface DecorContext {
   hint?: string;
 }
 
-export type DecorComponent = 'MagnetLines' | 'Cubes' | 'LaserFlow' | 'MagicRings' | 'CurvedLoop' | 'TextLoop';
+export type DecorComponent = 'MagnetLines' | 'Cubes' | 'LaserFlow' | 'MagicRings' | 'TextLoop';
 
 // A layout is described as data so the live page and the exported component render the same markup.
 // Component items render <div className={cls} style={style}><Component {...props} /></div>.
@@ -132,11 +131,6 @@ export const decorFor = (g: LayoutGene, ctx: DecorContext): DecorItem[] => {
           lineThickness: 2, opacity: 0.9, alphaMode: p.isLight ? 'coverage' : 'luminance', followMouse: false, clickBurst: false
         }
       }];
-    case 'curved':
-      return [
-        { component: 'CurvedLoop', cls: 'lay-curved lay-curved-top', style: { top: `calc(${g.y}% - 3.8vw)` }, props: { marqueeText: `${w} ✦ `, speed: 1.4, curveAmount: -400, direction: 'left', interactive: false, className: 'lay-curved-text' } },
-        { component: 'CurvedLoop', cls: 'lay-curved lay-curved-bottom', style: { top: `calc(${g.y}% + 1vw)` }, props: { marqueeText: `y = ${ctx.seed} ✦ `, speed: 1.1, curveAmount: 400, direction: 'right', interactive: false, className: 'lay-curved-text' } }
-      ];
     case 'textloop':
       return [{
         component: 'TextLoop',
@@ -158,7 +152,6 @@ const DECOR_COMPONENTS: Record<DecorComponent, AnyComponent> = {
   Cubes: Cubes as unknown as AnyComponent,
   LaserFlow: LaserFlow as unknown as AnyComponent,
   MagicRings: MagicRings as unknown as AnyComponent,
-  CurvedLoop: CurvedLoop as unknown as AnyComponent,
   TextLoop: TextLoop as unknown as AnyComponent
 };
 
@@ -168,7 +161,9 @@ export const Decor = ({ items }: { items: DecorItem[] }) => (
       if ('circular' in it)
         return (
           <div key={i} className="lay-orbit">
-            <CircularText text={it.circular} spinDuration={24} onHover="speedUp" />
+            <Suspense fallback={null}>
+              <CircularText text={it.circular} spinDuration={24} onHover="speedUp" />
+            </Suspense>
           </div>
         );
       if ('component' in it) {
@@ -247,10 +242,6 @@ export const LAYOUT_CSS = `
 .lay-laser.lay-dark canvas { filter: none !important; mix-blend-mode: screen !important; }
 .lay-laser.lay-light canvas { filter: invert(1) hue-rotate(180deg) !important; mix-blend-mode: multiply !important; }
 .lay-rings { position: absolute; width: min(96vmin, 960px); aspect-ratio: 1; transform: translate(-50%, -50%); }
-.lay-curved { position: absolute; left: 0; width: 100%; }
-.lay-curved .curved-loop-jacket { min-height: 0; display: block; }
-.lay-curved .curved-loop-svg { font-size: 3rem; font-family: var(--font); fill: var(--fg); opacity: 0.45; }
-.lay-curved .lay-curved-text { fill: var(--fg); }
 .lay-textloop { position: absolute; width: min(170vmin, 1500px); transform: translate(-50%, -50%); opacity: 0.9; }
 .lay-textloop .text-loop-text { font-family: var(--font); }
 @media (prefers-reduced-motion: reduce) { .lay-marquee { animation: none; } }

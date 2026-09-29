@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
 import { grow, type Genome } from './engine/genome';
 import { newSeed } from './engine/rng';
@@ -14,7 +14,11 @@ import { Overlay, OVERLAY_CSS } from './genes/overlay';
 import { generatedTransitionCss, isGenerated } from './genes/transition';
 import { RARITY_CSS, RARITY_LABEL } from './genes/rarity';
 import { BURST_CSS, fireBurst } from './genes/burst';
-import { ExportPanel } from './export/ExportPanel';
+import { universeName } from './genes/name';
+import { Behaviour } from './genes/behaviour';
+
+// The export panel (and its zip/code generator) only loads when someone opens it.
+const ExportPanel = lazy(() => import('./export/ExportPanel').then(m => ({ default: m.ExportPanel })));
 import { Layer } from './engine/Layer';
 
 const seedFromHash = () => location.hash.slice(1).replace(/[^0-9a-z]/gi, '') || null;
@@ -42,6 +46,16 @@ export const App = () => {
   const heard = useRef(false); // audio may only start after a user gesture
   const genomeRef = useRef(genome);
   genomeRef.current = genome;
+  const [name, setName] = useState('');
+
+  useEffect(() => {
+    let live = true;
+    setName('');
+    void universeName(genome.palette.accent, genome.seed).then(n => live && setName(n));
+    return () => {
+      live = false;
+    };
+  }, [genome.seed, genome.palette.accent]);
 
   useEffect(() => {
     void loadFont(genome.font);
@@ -118,7 +132,7 @@ export const App = () => {
     return () => removeEventListener('keydown', onKey);
   }, [press, keepOpen]);
 
-  const { palette, font, background, button, label, seed, cursor, layout, overlay, voice, rarity, name } = genome;
+  const { palette, font, background, button, label, seed, cursor, layout, overlay, voice, rarity } = genome;
   const hidesCursor = cursorEffectInfo(cursor)?.hidesCursor;
   const stage = {
     background: palette.bg,
@@ -154,13 +168,17 @@ export const App = () => {
       </Layer>
 
       <div className={`spot${rarity !== 'common' ? ' rarity-holo' : ''}`} style={{ left: `${layout.x}%`, top: `${layout.y}%` }}>
-        <Layer key={`x${seed}`} name={`button:${button.wrap}/${label.effect}`}>
+        <div key={`e${seed}`} className={`entrance enter-${button.entrance}`}>
+        <Layer name={`button:${button.wrap}/${label.effect}`}>
+          <Behaviour gene={genome.behaviour}>
           <XButton gene={button} palette={palette} onPress={press} onHover={() => sound.current.hover(genome.sound)}>
             <Layer name={`label:${label.effect}`} fallback={<span>{label.text}</span>}>
               <Label gene={label} palette={palette} font={font} color={labelColor(button, palette)} fontPx={button.size * 16} />
             </Layer>
           </XButton>
+          </Behaviour>
         </Layer>
+        </div>
       </div>
 
       <Layer key={`c${seed}`} name={`cursor:${cursor.effect}`}>
@@ -185,11 +203,15 @@ export const App = () => {
         <span>y = {seed}</span>
         <span className="name">{name}</span>
         <span className="meta">
-          {background.id} · {font.family} · {palette.mood} · {layout.kind} · {cursor.effect === 'none' ? cursor.css : cursor.effect} · {overlay.kind} · {voice.tone} · {genome.sound.voice} · n={count}
+          {background.id} · {font.family} · {palette.mood} · {layout.kind} · {cursor.effect === 'none' ? cursor.css : cursor.effect} · {overlay.kind} · {voice.tone} · {genome.behaviour.kind} · {genome.sound.voice} · n={count}
         </span>
       </footer>
 
-      <ExportPanel genome={genome} open={keepOpen} onClose={() => setKeepOpen(false)} />
+      {keepOpen && (
+        <Suspense fallback={null}>
+          <ExportPanel genome={{ ...genome, name }} open={keepOpen} onClose={() => setKeepOpen(false)} />
+        </Suspense>
+      )}
     </main>
   );
 };

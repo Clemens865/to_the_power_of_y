@@ -21,7 +21,6 @@ export const BUTTON_BASE_CSS = `
   transition: transform 0.25s cubic-bezier(.2,.9,.3,1.4), box-shadow 0.25s, filter 0.25s;
   -webkit-tap-highlight-color: transparent;
 }
-.xbtn:hover { transform: scale(1.04); }
 .xbtn:active { transform: scale(0.94); }
 .xbtn:focus-visible { outline: 3px solid var(--a2); outline-offset: 6px; }
 .xbtn-label { position: relative; z-index: 1; display: inline-flex; align-items: center; white-space: nowrap; }
@@ -38,7 +37,6 @@ export const SHAPE_CSS = {
   ticket: `.shape-ticket { border-radius: 0.2em; clip-path: polygon(0 0, 100% 0, 100% 35%, 94% 50%, 100% 65%, 100% 100%, 0 100%, 0 65%, 6% 50%, 0 35%); padding: 0.6em 1.6em; }`,
   hex: `.shape-hex { clip-path: polygon(12% 0, 88% 0, 100% 50%, 88% 100%, 12% 100%, 0 50%); padding: 0.7em 1.6em; }`,
   slant: `.shape-slant { transform: skewX(-12deg); }
-.shape-slant:hover { transform: skewX(-12deg) scale(1.04); }
 .shape-slant:active { transform: skewX(-12deg) scale(0.94); }`
 };
 
@@ -58,24 +56,82 @@ export const SKIN_CSS = {
   naked: `.skin-naked { background: transparent; padding: 0.2em; }`
 };
 
+// Idle loops animate the individual `scale` / `rotate` / `translate` properties (or filter / pseudo-elements),
+// so they combine with the `transform`-based hover and press states instead of fighting them.
+const idle = (name: string, anim: string, rest: string) => `.idle-${name} { animation: ${anim}; }
+.skin-gradient.idle-${name} { animation: grad-slide 6s linear infinite, ${anim}; }
+${rest}`;
+
 export const IDLE_CSS = {
   none: ``,
-  breathe: `.idle-breathe { animation: breathe 3.2s ease-in-out infinite; }
-.skin-gradient.idle-breathe { animation-name: grad-slide; }
-@keyframes breathe { 50% { scale: 1.07; } }`,
-  wobble: `.idle-wobble { animation: wobble 2.4s ease-in-out infinite; }
-.skin-gradient.idle-wobble { animation-name: grad-slide; }
-@keyframes wobble { 25% { rotate: -3deg; } 75% { rotate: 3deg; } }`,
-  float: `.idle-float { animation: float 4s ease-in-out infinite; }
-.skin-gradient.idle-float { animation-name: grad-slide; }
-@keyframes float { 50% { translate: 0 -0.25em; } }`,
+  breathe: idle('breathe', 'breathe 3.2s ease-in-out infinite', `@keyframes breathe { 50% { scale: 1.07; } }`),
+  wobble: idle('wobble', 'wobble 2.4s ease-in-out infinite', `@keyframes wobble { 25% { rotate: -3deg; } 75% { rotate: 3deg; } }`),
+  float: idle('float', 'float 4s ease-in-out infinite', `@keyframes float { 50% { translate: 0 -0.25em; } }`),
   'spin-border': `.idle-spin-border::before {
   content: ''; position: absolute; inset: -0.08em; border-radius: inherit; z-index: -1;
   background: conic-gradient(from var(--ang, 0deg), var(--a1), var(--a2), var(--a3), var(--a1));
   animation: spin-ang 3s linear infinite;
 }
 @property --ang { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
-@keyframes spin-ang { to { --ang: 360deg; } }`
+@keyframes spin-ang { to { --ang: 360deg; } }`,
+  heartbeat: idle('heartbeat', 'heartbeat 1.8s ease-in-out infinite', `@keyframes heartbeat { 0%, 40%, 100% { scale: 1; } 12% { scale: 1.08; } 26% { scale: 1.04; } }`),
+  swing: idle('swing', 'swing 3.4s ease-in-out infinite', `.idle-swing { transform-origin: 50% -40%; }
+@keyframes swing { 0%, 100% { rotate: -4deg; } 50% { rotate: 4deg; } }`),
+  twitch: idle('twitch', 'twitch 4s steps(1) infinite', `@keyframes twitch { 0%, 88%, 100% { translate: 0 0; } 90% { translate: 0.05em -0.03em; } 92% { translate: -0.05em 0.02em; } 94% { translate: 0.03em 0.03em; } 96% { translate: 0 0; } }`),
+  glow: idle('glow', 'glow-breathe 2.8s ease-in-out infinite', `@keyframes glow-breathe { 0%, 100% { filter: drop-shadow(0 0 0 transparent); } 50% { filter: drop-shadow(0 0 0.55em var(--a1)); } }`),
+  hue: idle('hue', 'hue-drift 9s linear infinite', `@keyframes hue-drift { to { filter: hue-rotate(360deg); } }`),
+  rubber: idle('rubber', 'rubber 3.2s ease-in-out infinite', `@keyframes rubber { 0%, 78%, 100% { scale: 1 1; } 84% { scale: 1.12 0.88; } 90% { scale: 0.93 1.07; } 95% { scale: 1.03 0.97; } }`),
+  tilt3d: idle('tilt3d', 'tilt3d 6s ease-in-out infinite', `@keyframes tilt3d { 0%, 100% { rotate: y -14deg; } 50% { rotate: y 14deg; } }`),
+  sway: idle('sway', 'sway 5s ease-in-out infinite', `@keyframes sway { 0%, 100% { translate: -0.18em 0; } 50% { translate: 0.18em 0; } }`),
+  comet: `.idle-comet::before {
+  content: ''; position: absolute; inset: -0.1em; border-radius: inherit; z-index: -1;
+  background: conic-gradient(from var(--ang, 0deg), transparent 0 72%, var(--a2) 96%, var(--fg) 100%);
+  animation: spin-ang 2.2s linear infinite;
+}
+@property --ang { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@keyframes spin-ang { to { --ang: 360deg; } }`,
+  shimmer: `.idle-shimmer::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: 0; pointer-events: none;
+  background: linear-gradient(110deg, transparent 38%, color-mix(in srgb, var(--fg) 45%, transparent) 50%, transparent 62%);
+  background-size: 260% 100%; animation: shimmer-sweep 3.2s ease-in-out infinite;
+}
+@keyframes shimmer-sweep { 0% { background-position: 130% 0; } 60%, 100% { background-position: -130% 0; } }`,
+  ring: `.idle-ring:not(.skin-brutal) { outline: 0.06em solid var(--a2); animation: ring-pulse 2.4s ease-out infinite; }
+.skin-gradient.idle-ring { animation: grad-slide 6s linear infinite, ring-pulse 2.4s ease-out infinite; }
+@keyframes ring-pulse { 0% { outline-offset: 0; outline-color: var(--a2); } 100% { outline-offset: 0.7em; outline-color: transparent; } }`
+};
+
+// Hover responses (a gene of their own). Written with :where() so they never beat :active (the press state)
+// and they leave the 3D tilt / sink presses alone, which own the hover transform themselves.
+const HOVER_OK = ':where(:not(:active):not(.press-tilt):not(.press-sink))';
+const hover = (name: string, t: string, extra = '') => `.hover-${name}:hover${HOVER_OK} { transform: ${t}; ${extra} }
+.shape-slant.hover-${name}:hover${HOVER_OK} { transform: skewX(-12deg) ${t}; ${extra} }`;
+
+export const HOVER_CSS = {
+  grow: hover('grow', 'scale(1.05)'),
+  lift: hover('lift', 'translateY(-0.14em) scale(1.02)', 'filter: drop-shadow(0 0.35em 0.4em #0006);'),
+  tilt: hover('tilt', 'rotate(-4deg) scale(1.03)'),
+  squish: hover('squish', 'scale(1.1, 0.92)'),
+  nudge: hover('nudge', 'translateX(0.12em) rotate(2deg)'),
+  glow: hover('glow', 'scale(1.03)', 'filter: drop-shadow(0 0 0.5em var(--a1)) drop-shadow(0 0 0.15em var(--a2));'),
+  bright: hover('bright', 'scale(1.02)', 'filter: brightness(1.2) saturate(1.35);'),
+  shrink: hover('shrink', 'scale(0.96)')
+};
+
+// Entrances play once when a universe arrives, on a wrapper around the button.
+const enter = (name: string, dur: string, ease: string, from: string) => `.enter-${name} { display: inline-block; animation: enter-${name} ${dur} ${ease} both; }
+@keyframes enter-${name} { from { ${from} } }`;
+
+export const ENTRANCE_CSS = {
+  none: ``,
+  pop: enter('pop', '0.55s', 'cubic-bezier(.2,1.5,.4,1)', 'scale: 0; opacity: 0;'),
+  drop: enter('drop', '0.7s', 'cubic-bezier(.3,1.4,.5,1)', 'translate: 0 -40vh; opacity: 0;'),
+  rise: enter('rise', '0.6s', 'cubic-bezier(.2,.9,.3,1)', 'translate: 0 1.2em; opacity: 0; filter: blur(6px);'),
+  spin: enter('spin', '0.7s', 'cubic-bezier(.2,1.2,.4,1)', 'rotate: -200deg; scale: 0.3; opacity: 0;'),
+  blur: enter('blur', '0.8s', 'ease-out', 'filter: blur(24px); opacity: 0; scale: 1.3;'),
+  stretch: enter('stretch', '0.6s', 'cubic-bezier(.3,1.6,.5,1)', 'scale: 2.2 0.1; opacity: 0;'),
+  flip: enter('flip', '0.75s', 'cubic-bezier(.2,1.1,.4,1)', 'transform: perspective(30em) rotateX(90deg); opacity: 0;'),
+  zoom: enter('zoom', '0.6s', 'cubic-bezier(.2,.9,.3,1)', 'scale: 3; opacity: 0;')
 };
 
 // Press micro-interactions (hand-written). JS in button.tsx toggles .is-pressing and sets
@@ -143,6 +199,9 @@ export const WRAP_CSS = `
 // universe font and size instead of each component's demo typography.
 export const LABEL_FX_CSS = `
 .xbtn .split-flap-text { font-weight: inherit; }
+/* WarpText's canvas is padded wider than its box; centre it instead of letting it overflow to the right */
+.xbtn .warp-text { position: relative; }
+.xbtn .warp-text > canvas { inset: auto !important; left: 50% !important; top: 50% !important; transform: translate(-50%, -50%); }
 .xbtn .text-block { margin: 0; max-width: none; font: inherit; color: inherit; }
 .xbtn .text-block p { margin: 0; }
 .xbtn .depth-text__layer, .xbtn .depth-text__face { letter-spacing: inherit; line-height: 1; }
@@ -166,6 +225,8 @@ export type Shape = keyof typeof SHAPE_CSS;
 export type Skin = keyof typeof SKIN_CSS;
 export type Idle = keyof typeof IDLE_CSS;
 export type Press = keyof typeof PRESS_CSS;
+export type Hover = keyof typeof HOVER_CSS;
+export type Entrance = keyof typeof ENTRANCE_CSS;
 
 export const ALL_BUTTON_CSS = [
   BUTTON_BASE_CSS,
@@ -173,9 +234,11 @@ export const ALL_BUTTON_CSS = [
   ...Object.values(SKIN_CSS),
   ...Object.values(IDLE_CSS),
   ...Object.values(PRESS_CSS),
+  ...Object.values(HOVER_CSS),
+  ...Object.values(ENTRANCE_CSS),
   WRAP_CSS,
   LABEL_FX_CSS
 ].join('\n');
 
-export const buttonCssFor = (shape: Shape, skin: Skin, idle: Idle, press: Press = 'none') =>
-  [BUTTON_BASE_CSS, SHAPE_CSS[shape], SKIN_CSS[skin], IDLE_CSS[idle], PRESS_CSS[press], WRAP_CSS, LABEL_FX_CSS].filter(Boolean).join('\n');
+export const buttonCssFor = (shape: Shape, skin: Skin, idle: Idle, press: Press = 'none', hover: Hover = 'grow', entrance: Entrance = 'none') =>
+  [BUTTON_BASE_CSS, SHAPE_CSS[shape], SKIN_CSS[skin], IDLE_CSS[idle], PRESS_CSS[press], HOVER_CSS[hover], ENTRANCE_CSS[entrance], WRAP_CSS, LABEL_FX_CSS].filter(Boolean).join('\n');

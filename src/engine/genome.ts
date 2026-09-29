@@ -2,7 +2,7 @@ import { createRng } from './rng';
 import { rollPalette, type Palette } from './palette';
 import { rollFont, type FontGene } from './fonts';
 import { rollBackground, backgroundUsesWebGL, type BackgroundGene } from '../genes/backgrounds';
-import { rollButton, buttonUsesWebGL, type ButtonGene } from '../genes/button';
+import { rollButton, rollHover, rollEntrance, buttonUsesWebGL, type ButtonGene } from '../genes/button';
 import { rollLabel, labelUsesWebGL, type LabelGene } from '../genes/label';
 import { rollTransition, type TransitionGene } from '../genes/transition';
 import { rollCursor, cursorUsesWebGL, downgradeCursor, type CursorGene } from '../genes/cursor';
@@ -12,11 +12,11 @@ import { rollOverlay, overlayUsesWebGL, type OverlayGene } from '../genes/overla
 import { rollRarity, type Rarity } from '../genes/rarity';
 import { rollVoice, type VoiceGene } from '../genes/voice';
 import { rollBurst, type BurstGene } from '../genes/burst';
-import { universeName } from '../genes/name';
+import { rollBehaviour, type BehaviourGene } from '../genes/behaviour';
 
 export interface Genome {
   seed: string;
-  name: string;
+  name: string; // filled in asynchronously by the app (see genes/name.ts); '' until then
   rarity: Rarity;
   palette: Palette;
   font: FontGene;
@@ -30,6 +30,7 @@ export interface Genome {
   overlay: OverlayGene;
   voice: VoiceGene;
   burst: BurstGene;
+  behaviour: BehaviourGene;
 }
 
 // Legendary universes trade their palette for black and gold.
@@ -58,8 +59,10 @@ export const grow = (seed: string): Genome => {
   let overlay = rollOverlay(sub('overlay'), palette);
   const voice = rollVoice(sub('voice'), seed);
   let burst = rollBurst(sub('burst'));
+  const behaviour = rollBehaviour(sub('behaviour'));
 
   label = { ...label, text: voice.word };
+  button = { ...button, hover: rollHover(sub('hover')), entrance: rollEntrance(sub('entrance')) };
   // Legendary and mythic universes always celebrate.
   if ((rarity === 'legendary' || rarity === 'mythic') && burst.kind === 'none') burst = { ...burst, kind: 'stars' };
 
@@ -75,7 +78,7 @@ export const grow = (seed: string): Genome => {
 
   return {
     seed,
-    name: universeName(palette.accent, seed),
+    name: '',
     rarity,
     palette,
     font,
@@ -88,6 +91,7 @@ export const grow = (seed: string): Genome => {
     sound,
     overlay,
     voice,
-    burst
+    burst,
+    behaviour
   };
 };

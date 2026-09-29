@@ -7,12 +7,12 @@ const GENERATED = ['iris', 'sweep', 'soft-wipe', 'stripes', 'checker'] as const;
 const EASINGS = ['cubic-bezier(.7,0,.2,1)', 'cubic-bezier(.2,.9,.3,1.2)', 'cubic-bezier(.9,0,.1,1)', 'ease-in-out', 'cubic-bezier(.5,0,.75,0)'];
 
 export interface TransitionGene {
-  kind: (typeof NAMED)[number] | (typeof GENERATED)[number];
+  kind: (typeof NAMED)[number] | (typeof GENERATED)[number] | 'pixels';
   duration: number; // seconds
   easing: string;
   sides: number; // iris polygon sides
   angle: number; // degrees, for sweep / wipe / stripes
-  count: number; // stripes / checker cells
+  count: number; // stripes / checker cells / pixels across the longest viewport edge
 }
 
 export const rollTransition = (rng: Rng): TransitionGene => ({
@@ -23,6 +23,12 @@ export const rollTransition = (rng: Rng): TransitionGene => ({
   angle: rng.int(0, 359),
   count: rng.int(4, 14)
 });
+
+// Call on a separate stream: the original transition roll must keep consuming exactly the same draws.
+export const rollPixelTransition = (rng: Rng, existing: TransitionGene): TransitionGene =>
+  rng.chance(0.15)
+    ? { ...existing, kind: 'pixels', count: rng.int(10, 18), duration: Math.round(rng.range(0.7, 1.05) * 100) / 100 }
+    : existing;
 
 export const isGenerated = (g: TransitionGene) => (GENERATED as readonly string[]).includes(g.kind);
 

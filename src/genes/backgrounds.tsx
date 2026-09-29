@@ -5,18 +5,21 @@ import { SHADER_IDS, shaderProps } from './shaders/props';
 import { THREE_SCENE_IDS, threeSceneProps } from './three/props';
 import { TSP_PRESETS, TSP_PACKAGE, TSP_LOADER, tsParticlesOptions, type TspPreset } from './bg/tsparticlesOptions';
 import { VANTA_EFFECTS, vantaOptions } from './bg/vantaOptions';
+import { LIBRARY_BACKGROUND_DEFS } from './bg/library';
+import { LibrarySurface, type LibrarySurfaceProps } from './bg/librarySurface';
+export { rollLibraryBackground, LIBRARY_BACKGROUND_IDS } from './bg/library';
 
 // Each background is an effect component plus a mapping from (rng, palette) to its props.
 // Sources: React Bits (vendored under src/vendor/react-bits) and Paper Shaders (@paper-design/shaders-react).
 type Props = Record<string, unknown>;
-interface BackgroundDef {
+export interface BackgroundDef {
   Component: LazyExoticComponent<ComponentType<any>>;
   props: (rng: Rng, p: Palette) => Props;
   /** Component name for the export kit (defaults to the capitalised id). */
   name?: string;
   /** 'rb' = React Bits (default), 'paper' = @paper-design/shaders-react, 'paperImage' = Paper image filters on a
    *  generated picture, 'tsp' = tsParticles preset, 'vanta' = Vanta.js effect. */
-  source?: 'rb' | 'paper' | 'paperImage' | 'tsp' | 'vanta' | 'shader' | 'three';
+  source?: 'rb' | 'paper' | 'paperImage' | 'tsp' | 'vanta' | 'shader' | 'three' | 'library';
   /** false for canvas-2D / DOM renderers. Defaults to true (except the legacy 2D ids below). */
   webgl?: boolean;
   /** Only eligible for palettes that pass this test. */
@@ -316,7 +319,9 @@ const THREE_ADDED: Record<string, BackgroundDef> = Object.fromEntries(
   ])
 );
 
-const DEFS: Record<string, BackgroundDef> = { ...LEGACY, ...RB_ADDED, ...PAPER_ADDED, ...TSP_ADDED, ...VANTA_ADDED, ...PAPER_IMAGE_ADDED, ...SHADER_ADDED, ...THREE_ADDED };
+const ORIGINAL_DEFS: Record<string, BackgroundDef> = { ...LEGACY, ...RB_ADDED, ...PAPER_ADDED, ...TSP_ADDED, ...VANTA_ADDED, ...PAPER_IMAGE_ADDED, ...SHADER_ADDED, ...THREE_ADDED };
+const DEFS: Record<string, BackgroundDef> = { ...ORIGINAL_DEFS, ...LIBRARY_BACKGROUND_DEFS };
+const ORIGINAL_BACKGROUND_IDS = Object.keys(ORIGINAL_DEFS);
 
 // Canvas-2D / DOM renderers among the v0.1 pool.
 const LEGACY_2D = new Set(['waves', 'dotGrid', 'letterGlitch']);
@@ -341,7 +346,7 @@ const tidy = (v: unknown): unknown =>
 const THREE_D_SOURCES = new Set(['three', 'vanta']);
 
 export const rollBackground = (rng: Rng, p: Palette): BackgroundGene => {
-  const eligible = BACKGROUND_IDS.filter(id => DEFS[id].when?.(p) ?? true);
+  const eligible = ORIGINAL_BACKGROUND_IDS.filter(id => DEFS[id].when?.(p) ?? true);
   // Real 3D scenes (our three.js pack and Vanta) are favourites, so they come up twice as often,
   // and the composed 3D still lifes (hero object + floor + companions) three times as often.
   const weight = (id: string) => (id.startsWith('threeStill') ? 3 : THREE_D_SOURCES.has(DEFS[id].source ?? 'rb') ? 2 : 1);
@@ -421,6 +426,10 @@ export const backgroundKit = (gene: BackgroundGene): { importLine: string | null
 
 export const Background = ({ gene }: { gene: BackgroundGene }) => {
   const { Component } = DEFS[gene.id];
+  if (DEFS[gene.id].source === 'library') {
+    const { surface, ...props } = gene.props;
+    return <LibrarySurface {...surface as LibrarySurfaceProps}><Component {...props} /></LibrarySurface>;
+  }
   // tsParticles / Vanta / Paper-image components size themselves to the stretched .bg child.
   // Paper's default renders at ≥2× and up to 8 Mpx; cap it like the image-based Paper shaders.
   return isPaper(gene.id) ? <Component {...gene.props} style={FILL} {...PAPER_PIXELS()} /> : <Component {...gene.props} />;

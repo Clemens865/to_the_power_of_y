@@ -4,9 +4,13 @@ import { fontUrl, fontVariationCss } from '../engine/fonts';
 import { backgroundKit, isShaderBackground, isVantaBackground, isThreeBackground } from '../genes/backgrounds';
 import { threeSceneKit, type ThreeSceneGeneProps } from '../genes/three';
 import { vantaKit } from './vantaKit';
+import { libraryBackgroundKit } from './libraryBackgroundKit';
+import { ticketKitFiles } from '../genes/ticketKit';
+import { holdKitFiles } from '../genes/holdKit';
+import { slingKitFiles } from '../genes/slingKit';
 import { shaderKit, type shaderProps } from '../genes/shaders';
 import { buttonCssFor } from '../genes/buttonCss';
-import { buttonKit, labelColor, pressNeedsJs, PRESS_HELPER_SOURCE } from '../genes/button';
+import { buttonKit, buttonOwnsAction, labelColor, pressNeedsJs, PRESS_HELPER_SOURCE } from '../genes/button';
 import { labelKit } from '../genes/label';
 import { cursorCss, cursorEffectInfo } from '../genes/cursor';
 import { decorKit, LAYOUT_CSS } from '../genes/layout';
@@ -36,20 +40,21 @@ const parts = (g: Genome) => {
   const shader = isShaderBackground(g.background.id) ? shaderKit(g.background.props as ReturnType<typeof shaderProps>) : null;
   const vanta = isVantaBackground(g.background.id) ? vantaKit(String(g.background.props.effect), g.background.props.options as Record<string, unknown>) : null;
   const three = isThreeBackground(g.background.id) ? threeSceneKit(g.background.props as unknown as ThreeSceneGeneProps) : null;
-  const background = shader
+  const library = libraryBackgroundKit(g.background);
+  const background = library ?? (shader
     ? { importLine: shader.importLine, jsx: shader.jsx, install: [] as string[] }
     : three
       ? { importLine: three.importLine, jsx: three.jsx, install: three.install }
       : vanta
       ? { importLine: vanta.importLine, jsx: vanta.jsx, install: vanta.install }
-      : backgroundKit(g.background);
+      : backgroundKit(g.background));
   const overlay = overlayKit(g.overlay);
   const cursor = cursorEffectInfo(g.cursor);
   const behaviour = behaviourKit(g.behaviour);
 
   const rb = new Set<string>([...label.components, ...button.components, ...decor.components]);
   if (cursor?.rb) rb.add(cursor.rb);
-  const rawImports = [background.importLine, overlay.importLine].filter((l): l is string => !!l);
+  const rawImports = [background.importLine, overlay.importLine, button.importLine].filter((l): l is string => !!l);
   const named = new Map<string, Set<string>>();
   const otherImports: string[] = [];
   for (const line of rawImports) {
@@ -59,12 +64,12 @@ const parts = (g: Genome) => {
     if (n) n[1].split(',').forEach(name => (named.get(n[2]) ?? named.set(n[2], new Set()).get(n[2])!).add(name.trim()));
     if (!m && !n) otherImports.push(line);
   }
-  const install = new Set<string>(['npm i ogl three gsap motion', ...background.install, ...overlay.install, ...behaviour.install]);
+  const install = new Set<string>(['npm i ogl three gsap motion', ...background.install, ...overlay.install, ...behaviour.install, ...(button.install ?? [])]);
   if (g.sound.voice === 'zzfx') install.add('npm i zzfx');
   const hasConfetti = g.burst.kind !== 'none' && g.burst.kind !== 'shockwave';
   if (hasConfetti) install.add('npm i @tsparticles/confetti');
   for (const c of rb) install.add(`npx shadcn@latest add @react-bits/${c}-TS-CSS`);
-  return { label, button, decor, background, overlay, cursor, behaviour, shader, vanta, three, rb: [...rb], named, otherImports, install: [...install], hasConfetti };
+  return { label, button, decor, background, overlay, cursor, behaviour, shader, vanta, three, library, rb: [...rb], named, otherImports, install: [...install], hasConfetti };
 };
 
 const burstOptions = (g: Genome) => {
@@ -165,7 +170,7 @@ export default function Universe({ onPress }: { onPress?: () => void }) {
       <div className="layout" aria-hidden>
         ${k.decor.jsx}
       </div>
-      <div className="xy-spot${g.rarity !== 'common' ? ' rarity-holo' : ''}" style={{ left: '${g.layout.x}%', top: '${g.layout.y}%' }} onClick={press}>
+      <div className="xy-spot${g.rarity !== 'common' ? ' rarity-holo' : ''}" style={{ left: '${g.layout.x}%', top: '${g.layout.y}%' }}${buttonOwnsAction(g.button) ? '' : ' onClick={press}'}>
         <div className="entrance enter-${g.button.entrance}">
         ${k.behaviour.jsx(k.button.jsx.split(' onClick={press}').join(''))}
         </div>
@@ -200,10 +205,11 @@ export const universeCss = (g: Genome): string => {
 .entrance { display: inline-block; }
 .cursor-layer { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
 .cursor-layer > * { width: 100%; height: 100%; }
-${fontVariationCss(f, '.xbtn-label')}
+${fontVariationCss(f, '.xbtn-label, .xy-hold .hold-button__label, .xy-sling-label')}
 ${buttonCssFor(g.button.shape, g.button.skin, g.button.idle, g.button.press, g.button.hover, g.button.entrance)}
 ${g.layout.kind === 'bare' ? '' : LAYOUT_CSS}
 ${k.overlay.css}
+${k.button.css ?? ''}
 ${g.rarity !== 'common' ? RARITY_CSS : ''}
 ${g.burst.kind === 'shockwave' ? BURST_CSS : ''}
 @media (prefers-reduced-motion: reduce) { .xbtn, .xbtn::before { animation: none !important; } }
@@ -222,7 +228,7 @@ Live: ${link}${g.rarity !== 'common' ? `\n\n**${RARITY_LABEL[g.rarity]}**` : ''}
 | Font | ${g.font.family} ${g.font.weight}${g.font.italic ? ' italic' : ''}, ${g.font.transform}, tracking ${g.font.tracking}${Object.keys(g.font.axes).length ? ` · axes ${Object.entries(g.font.axes).map(([t, v]) => `${t} ${v}`).join(', ')}` : ''}${g.font.pulse ? ` · breathing ${g.font.pulse.tag}` : ''} |
 | Background | ${g.background.id} |
 | Overlay | ${g.overlay.kind} |
-| Button | ${g.button.shape} · ${g.button.skin} · idle ${g.button.idle} · press ${g.button.press}${g.button.wrap !== 'none' ? ` · ${g.button.wrap}` : ''}${g.button.magnet ? ' · magnetic' : ''}${g.button.spark ? ' · click sparks' : ''} |
+| Button | ${g.button.shape} · ${g.button.skin} · idle ${g.button.idle} · press ${g.button.press}${buttonOwnsAction(g.button) ? ` · ${g.button.interaction}, click or keyboard` : ''}${g.button.wrap !== 'none' ? ` · ${g.button.wrap}` : ''}${g.button.magnet ? ' · magnetic' : ''}${g.button.spark ? ' · click sparks' : ''} |
 | Label | "${g.label.text}" · ${g.label.effect} · ${g.voice.tone} voice |
 | Layout | ${g.layout.kind} · button at ${g.layout.x}% / ${g.layout.y}% |
 | Cursor | ${g.cursor.css}${k.cursor ? ` + ${k.cursor.rb ?? `${k.cursor.trail} trail`}` : ''} |
@@ -257,7 +263,10 @@ export const buildKit = (g: Genome, link: string) => {
   };
   if (cursorEffectInfo(g.cursor)?.trail) files['trails.tsx'] = trailsSource;
   const p = parts(g);
-  Object.assign(files, p.shader?.files ?? {}, p.vanta?.files ?? {}, p.three?.files ?? {});
+  Object.assign(files, p.shader?.files ?? {}, p.vanta?.files ?? {}, p.three?.files ?? {}, p.library?.files ?? {}, p.button.files ?? {});
+  if (g.button.interaction === 'tear') Object.assign(files, ticketKitFiles());
+  if (g.button.interaction === 'hold') Object.assign(files, holdKitFiles());
+  if (g.button.interaction === 'sling') Object.assign(files, slingKitFiles());
   const behaviourSource = behaviourKit(g.behaviour).source;
   if (behaviourSource) files['Behaviour.tsx'] = behaviourSource;
   return files;

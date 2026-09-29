@@ -1,0 +1,20 @@
+.xy-hold { display: inline-grid; justify-items: stretch; width: min(360px, 82vw); gap: 12px; }
+.xy-hold .hold-button {
+  width: 100%; height: auto; min-height: 108px; padding: 0.65em 0.8em;
+  font-family: var(--font); font-weight: var(--weight); font-style: var(--italic);
+  font-size: var(--hold-size); text-transform: var(--transform); letter-spacing: var(--tracking);
+  line-height: 1.15; box-shadow: 0 12px 32px #0003;
+}
+.xy-hold .hold-button__label { width: 100%; min-width: 0; }
+.xy-hold .hold-button__label > span, .xy-hold .xbtn-label, .xy-hold .xbtn-label * {
+  max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: center;
+}
+.xy-hold .hold-button__label--fill { box-sizing: border-box; padding: 0.65em 0.8em; }
+.xy-hold .hold-button__done { font-family: system-ui, sans-serif; }
+.xy-hold .hold-button:focus-visible { outline: 3px solid var(--fg, currentColor); outline-offset: 6px; }
+.xy-hold-hint { font: 600 9px/1.2 ui-monospace, monospace; letter-spacing: 0.1em; text-align: center; color: var(--fg); }
+@media (prefers-reduced-motion: reduce) {
+  .xy-hold *, .xy-hold *::before { animation: none !important; transition: none !important; }
+  .xy-hold .hold-button__fill { opacity: 0 !important; }
+  .xy-hold .hold-button[data-phase='done'] .hold-button__fill { opacity: 1 !important; }
+}

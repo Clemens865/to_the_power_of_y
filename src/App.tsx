@@ -4,8 +4,10 @@ import { grow, type Genome } from './engine/genome';
 import { newSeed } from './engine/rng';
 import { loadFont, fontVariationCss } from './engine/fonts';
 import { SoundEngine } from './engine/sound';
+import { startPixelTransition, type PixelTransition } from './engine/pixelTransition';
+import { createHashNavigationGate } from './engine/hashNavigation';
 import { Background } from './genes/backgrounds';
-import { XButton, labelColor } from './genes/button';
+import { XButton, labelColor, buttonOwnsAction } from './genes/button';
 import { ALL_BUTTON_CSS } from './genes/buttonCss';
 import { Label } from './genes/label';
 import { CursorLayer, cursorCss, cursorEffectInfo } from './genes/cursor';
@@ -45,6 +47,9 @@ export const App = () => {
   const origin = useRef({ x: innerWidth / 2, y: innerHeight / 2 });
   const sound = useRef(new SoundEngine());
   const heard = useRef(false); // audio may only start after a user gesture
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const hashNavigation = useRef(createHashNavigationGate());
+  const cancelUniverseChange = useRef(noop);
   const genomeRef = useRef(genome);
   genomeRef.current = genome;
   const [name, setName] = useState('');
@@ -74,11 +79,34 @@ export const App = () => {
 
   // Every universe change goes through the URL, so back/forward replays earlier ys.
   useEffect(() => {
-    const onHash = async () => {
+    let live = true;
+    let request = 0;
+    let requestedSeed: string | null = null;
+    let pixels: PixelTransition | undefined;
+    let view: ViewTransition | undefined;
+    const cancelCurrent = () => {
+      request++;
+      requestedSeed = null;
+      pixels?.cancel();
+      pixels = undefined;
+      view?.skipTransition();
+      view = undefined;
+    };
+    cancelUniverseChange.current = cancelCurrent;
+    const onHash = async (event: HashChangeEvent) => {
+      if (!hashNavigation.current.acceptHashChange(event, location.href)) return;
+      clearTimeout(pressTimer.current);
+      pressTimer.current = undefined;
       const seed = seedFromHash();
-      if (!seed) return;
+      if (seed && seed === requestedSeed) return;
+      cancelCurrent();
+      if (!seed || seed === genomeRef.current.seed) return;
+      requestedSeed = seed;
+      const version = request;
       const next = grow(seed);
       await loadFont(next.font).catch(() => undefined);
+      // Font loads and native transition callbacks can finish after a newer navigation.
+      if (!live || version !== request || seed !== seedFromHash()) return;
       const root = document.documentElement;
       const { x, y } = origin.current;
       const t = next.transition;
@@ -95,29 +123,51 @@ export const App = () => {
         document.head.appendChild(dyn);
       }
       dyn.textContent = isGenerated(t) ? generatedTransitionCss(t, x, y) : '';
-      const apply = () =>
+      let applied = false;
+      const apply = () => {
+        if (applied || !live || version !== request || seed !== seedFromHash()) return;
+        applied = true;
         flushSync(() => {
           setGenome(next);
           setCount(c => c + 1);
         });
+        if (heard.current) {
+          try {
+            sound.current.ambient(next.sound);
+          } catch (err) {
+            console.warn('[xʸ] ambient sound failed:', err);
+          }
+        }
+      };
       try {
-        if (document.startViewTransition && !reducedMotion()) document.startViewTransition(apply);
-        else apply();
+        if (reducedMotion()) apply();
+        else if (t.kind === 'pixels') {
+          const running = startPixelTransition({ seed, gene: t,
+            colors: [next.palette.accent, next.palette.accent2, next.palette.accent3, next.palette.bg], apply });
+          pixels = running;
+          void running.finished.then(() => { if (pixels === running) pixels = undefined; });
+        } else if (document.startViewTransition) {
+          const running = document.startViewTransition(apply);
+          view = running;
+          void running.ready.catch(noop);
+          void running.updateCallbackDone.catch(apply);
+          void running.finished.catch(noop).then(() => { if (view === running) view = undefined; });
+        } else apply();
       } catch (err) {
         // A failed transition must not strand the page on the old universe.
         console.warn('[xʸ] transition failed, switching directly:', err);
         apply();
       }
-      if (heard.current) {
-        try {
-          sound.current.ambient(next.sound);
-        } catch (err) {
-          console.warn('[xʸ] ambient sound failed:', err);
-        }
-      }
     };
     addEventListener('hashchange', onHash);
-    return () => removeEventListener('hashchange', onHash);
+    return () => {
+      live = false;
+      cancelCurrent();
+      cancelUniverseChange.current = noop;
+      clearTimeout(pressTimer.current);
+      removeEventListener('hashchange', onHash);
+      document.getElementById('vt-generated')?.remove();
+    };
   }, []);
 
   const press = useCallback((e?: { clientX: number; clientY: number }) => {
@@ -127,8 +177,17 @@ export const App = () => {
     // Schedule the new universe FIRST: sound and bursts are extras and must never be able to stop a press
     // (e.g. a browser that refuses to create audio used to swallow the click entirely).
     // A beat of delay lets the press animation register before the universe is replaced.
-    setTimeout(() => {
-      location.hash = newSeed();
+    const intent = hashNavigation.current.beginPress();
+    clearTimeout(pressTimer.current);
+    cancelUniverseChange.current();
+    pressTimer.current = setTimeout(() => {
+      pressTimer.current = undefined;
+      const seed = newSeed();
+      const oldURL = location.href;
+      const nextURL = new URL(oldURL);
+      nextURL.hash = seed;
+      hashNavigation.current.recordAuthored(oldURL, nextURL.href, intent);
+      location.hash = seed;
     }, 120);
     try {
       sound.current.press(current.sound);
@@ -140,7 +199,7 @@ export const App = () => {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (keepOpen || e.metaKey || e.ctrlKey) return;
+      if (keepOpen || e.defaultPrevented || e.metaKey || e.ctrlKey) return;
       if (e.code === 'Space' && document.activeElement?.tagName !== 'BUTTON') {
         e.preventDefault();
         press();
@@ -171,7 +230,7 @@ export const App = () => {
 
   return (
     <main className={`stage${rarity === 'mythic' ? ' rarity-mythic' : ''}`} style={stage}>
-      <style>{ALL_BUTTON_CSS + LAYOUT_CSS + OVERLAY_CSS + RARITY_CSS + BURST_CSS + fontVariationCss(font, '.xbtn-label')}</style>
+      <style>{ALL_BUTTON_CSS + LAYOUT_CSS + OVERLAY_CSS + RARITY_CSS + BURST_CSS + fontVariationCss(font, '.xbtn-label, .xy-hold .hold-button__label, .xy-sling-label')}</style>
       <Layer key={`b${seed}`} name={`background:${background.id}`} className="bg">
         <Suspense fallback={null}>
           <Background gene={background} />
@@ -189,11 +248,11 @@ export const App = () => {
       {/* The whole button area takes the click, not just the inner <button>: materials (specular, pixel card, glass, …)
           draw beyond it, and press/tilt transforms can move the button out from under a mouse-up. Keyboard presses
           on the <button> produce a click that bubbles here too. */}
-      <div className={`spot${rarity !== 'common' ? ' rarity-holo' : ''}`} style={{ left: `${layout.x}%`, top: `${layout.y}%` }} onClick={press}>
+      <div className={`spot${rarity !== 'common' ? ' rarity-holo' : ''}`} style={{ left: `${layout.x}%`, top: `${layout.y}%` }} onClick={buttonOwnsAction(button) ? undefined : press}>
         <div key={`e${seed}`} className={`entrance enter-${button.entrance}`}>
         <Layer name={`button:${button.wrap}/${label.effect}`}>
           <Behaviour gene={genome.behaviour}>
-          <XButton gene={button} palette={palette} onPress={noop} onHover={() => sound.current.hover(genome.sound)}>
+          <XButton gene={button} palette={palette} onPress={buttonOwnsAction(button) ? press : noop} onHover={() => sound.current.hover(genome.sound)}>
             <Layer name={`label:${label.effect}`} fallback={<span>{label.text}</span>}>
               <Label gene={label} palette={palette} font={font} color={labelColor(button, palette)} fontPx={button.size * 16} />
             </Layer>

@@ -6,7 +6,7 @@ xʸ is an experimental random-machine website. The page holds a single button (t
 
 The **y** is a seed, a 12-character code that grows a full "genome" of design decisions. The same y always grows the same universe, so every page you land on can be shared, revisited and exported.
 
-> **About 10³³ combinations**, counting only the listed choices of each layer (14,584 palettes × 3,210 font styles × 127 backgrounds × 13 textures × 83 million button looks × 6 behaviours × 1,520 labels × …). Continuous values such as speeds, sizes, generated palettes and font axes aren't counted and push it far higher. A 12-character seed can reach about 281 trillion of them: pressing once a second, you'd need nearly 9 million years to see them all.
+> **About 10³³ combinations**, counting only the listed choices of each layer (14,584 palettes × 3,210 font styles × 132 backgrounds × 13 textures × 83 million button looks × 6 behaviours × 1,520 labels × …). Continuous values such as speeds, sizes, generated palettes and font axes aren't counted and push it far higher. A 12-character seed can reach about 281 trillion of them: pressing once a second, you'd need nearly 9 million years to see them all.
 
 ---
 
@@ -54,9 +54,9 @@ The **keep** panel shows the palette (click a swatch to copy its hex) and the fo
 | --- | --- |
 | **Palette** | Four sources: 7 hand-made moods, ~1,000 human-made palettes, OKLCH generation around a seeded hue, and [poline](https://github.com/meodai/poline) curves between seeded anchors. Every palette passes a readability guard (text ≥ 4.5:1 WCAG contrast) |
 | **Font** | 107 Google Fonts, including every variable display face. Variable axes are randomised (Fraunces SOFT/WONK, Recursive CASL, Kablammo MORF, Tilt XROT/YROT, …), and a third of universes let one axis slowly "breathe" |
-| **Background** | 127 animated backgrounds. Real 3D comes up most: **8 composed 3D still lifes** (a hero object — wire globe with needles, glass orb with a lava core, torus, crystal, gyroscope, urchin, knot or cube stack — off to one side, on a seeded floor with companion objects and a slowly orbiting camera; three times as likely), then **12 original three.js scenes** written for xʸ (dot sea, ring tunnel, orbit rings, point sphere, synthwave terrain, tumbling cubes, double helix, spiral galaxy, ridge lines, voxel sea, torus knot, crystal cluster), 9 [Vanta](https://www.vantajs.com) effects (dots, rings, fog, cells, clouds, net, globe, …), 41 from [React Bits](https://reactbits.dev), 29 [Paper Shaders](https://shaders.paper.design), 14 [tsParticles](https://particles.js.org) scenes and **14 original GLSL shaders** (marble, topographic lines, truchet tiles, kaleidoscope, moiré, stained glass, aurora, …) |
+| **Background** | 132 animated backgrounds. Real 3D is weighted more heavily: **8 composed 3D still lifes** (a hero object — wire globe with needles, glass orb with a lava core, torus, crystal, gyroscope, urchin, knot or cube stack — off to one side, on a seeded floor with companion objects and a slowly orbiting camera; three times as likely), then **12 original three.js scenes** written for xʸ (dot sea, ring tunnel, orbit rings, point sphere, synthwave terrain, tumbling cubes, double helix, spiral galaxy, ridge lines, voxel sea, torus knot, crystal cluster), 9 [Vanta](https://www.vantajs.com) effects (dots, rings, fog, cells, clouds, net, globe, …), 45 from [React Bits](https://reactbits.dev), 29 [Paper Shaders](https://shaders.paper.design), 14 [tsParticles](https://particles.js.org) scenes and **14 original GLSL shaders** (marble, topographic lines, truchet tiles, kaleidoscope, moiré, stained glass, aurora, …), plus **Typography Vortex** from ThreeUI |
 | **Texture** | A layer over the background: dither, paper, halftone, film grain, scanlines, vignette, fibre, frost, droplets, glyph rain, clouds or blaze (or none) |
-| **Button** | 8 shapes × 9 skins, with materials (electric border, glare, specular, border glow, pixel card, glass surface, spotlight), magnetic pull and click sparks |
+| **Button** | 8 shapes × 9 skins, with materials (electric border, glare, specular, border glow, pixel card, glass surface, spotlight), magnetic pull and click sparks; occasional **tear tickets**, **liquid-fill hold buttons** and **slingshot buttons**, all with tap and keyboard activation |
 | **Button motion** | 16 idle loops (breathe, heartbeat, swing, rubber, 3D tilt, comet, shimmer, ring pulse, hue drift, …), 8 hover responses (grow, lift, tilt, squish, glow, …), 8 entrances (pop, drop, rise, spin, blur, stretch, flip, zoom) and 6 press reactions (pop, shake, jelly, sink, ripple, 3D tilt) — all pure CSS |
 | **Behaviour** | Where the button goes: still, drift, orbit, bob, dodge (slips away from the pointer once, then lets you press it) or gravity (drops in and bounces, with real physics) |
 | **Label** | 20 text treatments (shiny, gradient, decrypt, fuzzy, typewriter, rotating, blur, split-flap, scramble, 3D depth, echo, stroke, warp, particles, pressure, tech, fold, focus, split) |
@@ -65,7 +65,7 @@ The **keep** panel shows the palette (click a swatch to copy its hex) and the fo
 | **Layout** | 12 kinds: frame, poster, marquee, swiss grid, split, orbit, magnet lines, 3D cubes, laser, magic rings, looping text ring, or bare; plus where the button sits |
 | **Burst** | What flies out on press: confetti, stars, hearts, card suits, fireworks, snow, emoji or a shockwave |
 | **Sound** | 7 synthesised press voices or a seeded [ZzFX](https://github.com/KilledByAPixel/ZzFX) sound (coin, laser, jump, power-up, hit, bubble, robot, crunch), a hover tick, and sometimes an ambient bed, keyed to the palette hue. No audio files |
-| **Transition** | 12 named View Transitions plus 5 generated ones (polygon iris, conic sweep, soft wipe, stripes, checkerboard) whose shape, angle, count, timing and easing come from the seed |
+| **Transition** | 12 named View Transitions plus 5 generated ones (polygon iris, conic sweep, soft wipe, stripes, checkerboard) whose shape, angle, count, timing and easing come from the seed, plus a seeded **pixel mosaic** transition |
 | **Name** | The nearest named colour to the accent plus a number, e.g. *Tangerine Dream no. 4127* |
 
 ---
@@ -82,16 +82,17 @@ npm run dev        # http://localhost:5178
 ```
 
 ```sh
+npm test           # seed stability, transitions, lifecycle and export kits
 npm run typecheck  # TypeScript
 npm run build      # production build into dist/
 npm run preview    # serve the production build
 ```
 
-Transitions use the [View Transitions API](https://developer.mozilla.org/docs/Web/API/View_Transitions_API) (Chromium, Safari 18+). Other browsers still get new universes, just without the animated change-over. With *prefers-reduced-motion* turned on, transitions, bursts and idle animations are switched off.
+Transitions use the [View Transitions API](https://developer.mozilla.org/docs/Web/API/View_Transitions_API) (Chromium, Safari 18+). The pixel mosaic also works without that API; other transition types fall back to a direct change. With *prefers-reduced-motion* turned on, transitions, bursts and idle animations are switched off.
 
 **Guardrails.** A universe never runs more than two WebGL layers at once (extras are swapped for 2D versions), every layer sits in an error boundary so one broken effect can't blank the page, and WebGL contexts are released when a universe is replaced.
 
-**Lightweight by design.** The first load is ~146 KB gzipped (mostly React); every background, texture, cursor, label effect, button material, decoration, the colour-name list and the export panel is its own chunk, loaded only when a universe uses it. Shaders render below full resolution with capped pixel density. Measured in a headless Chromium: median 120 fps across random universes (slowest seen: ~84), and the JS heap levels off at ~17 MB after 80 presses.
+**Loaded on demand.** The initial JavaScript entry and its static imports total about 151 KB gzipped, before scene-specific chunks and fonts. Backgrounds, textures, cursors, label effects, button materials, decorations, the colour-name list and the export panel load only when needed. Shaders use capped pixel density; performance varies with the scene and device.
 
 ---
 
@@ -105,6 +106,8 @@ src/
     palette.ts     four palette sources + the readability guard
     fonts.ts       font pool, variable axes and on-demand Google Fonts loading
     sound.ts       Web Audio synth + seeded ZzFX (also shipped as-is in export kits)
+    pixelTransition.ts bounded DOM mosaic with cancellation
+    hashNavigation.ts  latest-intent guard for queued hash events
     Layer.tsx      error boundary + WebGL clean-up around every visual layer
   data/
     fonts.json     frozen font snapshot (so seeds stay stable)
@@ -118,19 +121,24 @@ src/
     layout.tsx       layouts described as data + their CSS
     overlay.tsx      texture layer
     transition.ts    named + generated transitions
+    ticketButton.tsx drag, click and keyboard adapter for tear tickets
+    holdButton.tsx   liquid-fill hold or tap interaction
+    slingButton.tsx  slingshot pull/release or tap interaction
     rarity.ts / voice.ts / burst.ts / name.ts
   export/
     kit.ts           code generator for the downloadable kit
     ExportPanel.tsx  the "keep" dialog
   genes/shaders/    the 14 original GLSL backgrounds (ours — shipped in export kits)
   genes/three/      the 12 original three.js scenes + the still-life composer (ours — shipped in export kits)
-  genes/bg/         tsParticles, Vanta and Paper-image adapters
+  genes/bg/         tsParticles, Vanta, Paper-image and library background adapters
   genes/behaviour.tsx  button behaviour (drift, orbit, dodge, gravity, …)
   vendor/react-bits/ the React Bits components used, with their licence
   vendor/canvas-ui/  the Canvas UI effects used, with their licence
 ```
 
-Each press writes a new seed into the URL hash. A `hashchange` listener grows the genome, preloads its font, then swaps the universe inside `document.startViewTransition`.
+Each press writes a new seed into the URL hash. A `hashchange` listener grows the genome, preloads its font, then swaps the universe through a View Transition or a bounded DOM pixel mosaic. Newer presses and browser navigation cancel older pending work.
+
+The [library motion pack](docs/library-motion.md) adds five backgrounds, tear tickets, liquid-fill hold and slingshot buttons, and the pixel mosaic. That document includes stable preview seeds and implementation notes.
 
 ### Add your own gene
 
@@ -145,6 +153,7 @@ Adding a new background is a single entry in `src/genes/backgrounds.tsx`.
 ## Credits & licences
 
 - Backgrounds, text effects, cursor effects and button wrappers are from **[React Bits](https://reactbits.dev)** by David Haz, licensed MIT + Commons Clause (see [`src/vendor/react-bits/LICENSE.md`](src/vendor/react-bits/LICENSE.md)). You may use them in your own sites and apps, but not resell the components themselves. Export kits therefore reference the official React Bits registry rather than bundling their source.
+- Typography Vortex from [ThreeUI Community](https://threeui.com/text-animation/typography-vortex), MIT; its adapted source and licence are included in matching export kits.
 - [Paper Shaders](https://github.com/paper-design/shaders) (Apache-2.0).
 - [Canvas UI](https://github.com/DavidHDev/canvas-ui) effects (frost, droplets, glyph rain, clouds, blaze, bubbles), MIT + Commons Clause like React Bits — used on the site, not shipped in export kits.
 - [Vanta](https://github.com/tengbao/vanta), [tsParticles](https://github.com/tsparticles/tsparticles) and [matter-js](https://github.com/liabru/matter-js) (all MIT). Vanta runs on today's three.js with a small compatibility shim (`src/genes/bg/VantaBg.tsx`), which export kits ship too, so Vanta universes export with their background.

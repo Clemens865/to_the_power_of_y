@@ -59,15 +59,26 @@ export class SoundEngine {
   private ambientStop: (() => void) | null = null;
   muted = false;
 
+  private unavailable = false;
+
+  // Audio is optional: if the browser can't (or won't) create an AudioContext, stay silent instead of throwing.
   private ensure(): AudioContext | null {
-    if (this.muted) return null;
+    if (this.muted || this.unavailable) return null;
     if (!this.ctx) {
-      this.ctx = new AudioContext();
-      this.master = this.ctx.createGain();
-      this.master.gain.value = 0.5;
-      this.master.connect(this.ctx.destination);
+      try {
+        const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!Ctor) throw new Error('Web Audio not supported');
+        this.ctx = new Ctor();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = 0.5;
+        this.master.connect(this.ctx.destination);
+      } catch {
+        this.unavailable = true;
+        this.ctx = null;
+        return null;
+      }
     }
-    if (this.ctx.state === 'suspended') void this.ctx.resume();
+    if (this.ctx.state === 'suspended') void this.ctx.resume().catch(() => undefined);
     return this.ctx;
   }
 
@@ -120,10 +131,12 @@ export class SoundEngine {
     };
     if (this.zzfxBuild) return run();
     // Lazy: ZzFX creates an AudioContext on import, so only load it after a user gesture.
-    void import('zzfx').then(({ ZZFX }) => {
-      this.zzfxBuild = (...p: number[]) => ZZFX.buildSamples(...p);
-      run();
-    });
+    void import('zzfx')
+      .then(({ ZZFX }) => {
+        this.zzfxBuild = (...p: number[]) => ZZFX.buildSamples(...p);
+        run();
+      })
+      .catch(() => undefined); // ZzFX creates its own AudioContext on import, which can fail too
   }
 
   press(g: SoundGene) {

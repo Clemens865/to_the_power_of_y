@@ -22,7 +22,7 @@ export const rollBehaviour = (rng: Rng): BehaviourGene => {
   if (roll < 0.67) return { kind: 'drift', amp: r2(rng.range(3, 6)), period: r2(rng.range(14, 26)), phase };
   if (roll < 0.76) return { kind: 'orbit', amp: r2(rng.range(2, 5)), period: r2(rng.range(10, 20)), phase };
   if (roll < 0.86) return { kind: 'bob', amp: r2(rng.range(0.8, 2)), period: r2(rng.range(3, 6)), phase };
-  if (roll < 0.93) return { kind: 'dodge', amp: r2(rng.range(8, 14)), period: 0, phase };
+  if (roll < 0.93) return { kind: 'dodge', amp: r2(rng.range(5, 9)), period: 0, phase };
   return { kind: 'gravity', amp: r2(rng.range(30, 60)), period: r2(rng.range(4, 6.5)), phase };
 };
 
@@ -49,7 +49,7 @@ const startLoop = (el: HTMLElement, g: BehaviourGene) => {
   return () => cancelAnimationFrame(raf);
 };
 
-// Dodge: slide away from an approaching mouse, at most 3 times; then it stays put to be pressed.
+// Dodge: slide away from an approaching mouse once, then stay put to be pressed (more read as "broken").
 // Never dodges touch/pen, a pointer already over the button, or keyboard use.
 const startDodge = (el: HTMLElement, g: BehaviourGene) => {
   let dodges = 0;
@@ -58,7 +58,7 @@ const startDodge = (el: HTMLElement, g: BehaviourGene) => {
   let cooldown = 0;
   el.style.transition = 'transform 0.35s cubic-bezier(.2,.9,.3,1.2)';
   const onMove = (e: PointerEvent) => {
-    if (dodges >= 3 || e.pointerType !== 'mouse' || performance.now() < cooldown) return;
+    if (dodges >= 1 || e.pointerType !== 'mouse' || performance.now() < cooldown) return;
     const r = el.getBoundingClientRect(); // includes the current offset
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
@@ -191,11 +191,11 @@ const KIT_LOOP = (g: BehaviourGene) => `    const t0 = performance.now();
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);`;
 
-const KIT_DODGE = (g: BehaviourGene) => `    // Slides away from an approaching mouse at most 3 times, then stays put to be pressed.
+const KIT_DODGE = (g: BehaviourGene) => `    // Slides away from an approaching mouse once, then stays put to be pressed.
     let dodges = 0, x = 0, y = 0, cooldown = 0;
     el.style.transition = 'transform 0.35s cubic-bezier(.2,.9,.3,1.2)';
     const onMove = (e: PointerEvent) => {
-      if (dodges >= 3 || e.pointerType !== 'mouse' || performance.now() < cooldown) return;
+      if (dodges >= 1 || e.pointerType !== 'mouse' || performance.now() < cooldown) return;
       const r = el.getBoundingClientRect();
       const dx = r.left + r.width / 2 - e.clientX;
       const dy = r.top + r.height / 2 - e.clientY;
